@@ -31,4 +31,4 @@ Developed with Python, it provides an interactive menu to install, manage, and c
 Run this command on your server:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/YOUR_USERNAME/mtpulse-proxy/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/install.sh)
