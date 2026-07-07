@@ -2,7 +2,7 @@
 set -e
 
 APP_DIR="/opt/mtpulse-proxy"
-REPO_URL="https://github.com/YOUR_USERNAME/mtpulse-proxy.git"
+REPO_URL="https://github.com/Mahersaber2024/MTProxy-Advanced-.git"
 SERVICE_NAME="mtpulse"
 SERVICE_USER="root"
 
