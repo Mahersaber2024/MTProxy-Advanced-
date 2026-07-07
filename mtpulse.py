@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mtpulse.py - MTPulse MTProto Proxy Manager (Python version)
+# mtpulse.py - MTPulse MTProto Proxy Manager (Multi-Proxy Support)
 
 import os
 import sys
@@ -7,16 +7,19 @@ import subprocess
 import json
 import time
 import shutil
+import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
-SERVICE_NAME = "mtpulse"
-CONFIG_DIR = "/etc/mtpulse"
 BINARY_PATH = "/usr/local/bin/mtproto-proxy"
+CONFIG_DIR = "/etc/mtpulse"
+CONFIG_FILE = f"{CONFIG_DIR}/proxies.json"
+SECRET_FILE = f"{CONFIG_DIR}/proxy-secret"
+MULTI_FILE = f"{CONFIG_DIR}/proxy-multi.conf"
 # ===============================
 
 # Colors (ANSI escape codes)
@@ -46,7 +49,7 @@ def print_header():
     print(f"{Colors.CYAN}{Colors.BOLD}║       ██║ ╚═╝ ██║   ██║   ██║        ██║   ███████╗███████╗███████║  ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}║       ╚═╝     ╚═╝   ╚═╝   ╚═╝        ╚═╝   ╚══════╝╚══════╝╚══════╝  ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}║                                                                     ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║                  MTProto Proxy Manager  -  v{VERSION}                 ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║              MTProto Proxy Manager  -  v{VERSION} (Multi-Proxy)      ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}╚═══════════════════════════════════════════════════════════════════════╝{Colors.NC}")
     print("")
     print(f"{Colors.PURPLE}{Colors.BOLD}🌟 Sponsored by: {SPONSOR_NAME}{Colors.NC}")
@@ -55,148 +58,92 @@ def print_header():
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
 
-def get_proxy_status():
-    """Check if proxy service is active and get details"""
-    if not os.path.exists("/etc/systemd/system/mtpulse.service"):
-        return {"status": "not_installed"}
-    
-    result = subprocess.run(
-        ['systemctl', 'is-active', SERVICE_NAME],
-        capture_output=True, text=True
-    )
-    active = result.stdout.strip() == "active"
-    
-    info = {"status": "active" if active else "inactive"}
-    
-    if active:
-        # Get details from service file
-        try:
-            with open("/etc/systemd/system/mtpulse.service", 'r') as f:
-                content = f.read()
-                for line in content.split('\n'):
-                    if 'ExecStart=' in line:
-                        # Extract port, secret, tag
-                        import re
-                        port_match = re.search(r'-H\s+(\d+)', line)
-                        secret_match = re.search(r'-S\s+([a-f0-9]+)', line)
-                        tag_match = re.search(r'-P\s+([a-f0-9]+)', line)
-                        if port_match:
-                            info['port'] = port_match.group(1)
-                        if secret_match:
-                            info['secret'] = secret_match.group(1)
-                        if tag_match:
-                            info['tag'] = tag_match.group(1)
-        except:
-            pass
-        
-        # Get public IP
-        try:
-            public_ip = subprocess.run(
-                ['curl', '-s', '--max-time', '2', 'https://api.ipify.org'],
-                capture_output=True, text=True
-            ).stdout.strip()
-            if public_ip:
-                info['ip'] = public_ip
-        except:
-            pass
-    
-    return info
+def load_config():
+    """Load proxy configuration"""
+    if not os.path.exists(CONFIG_FILE):
+        return {"proxies": {}}
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {"proxies": {}}
 
-def install_proxy():
-    """Install MTProto Proxy from official source"""
-    clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}📥 Install MTProto Proxy (Official){Colors.NC}")
+def save_config(config):
+    """Save proxy configuration"""
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+def generate_secret():
+    """Generate a random secret"""
+    secret = subprocess.run(['head', '-c', '16', '/dev/urandom'], capture_output=True).stdout
+    return subprocess.run(['xxd', '-ps'], input=secret, capture_output=True).stdout.decode().strip()
+
+def get_public_ip():
+    """Get public IP address"""
+    try:
+        ip = subprocess.run(['curl', '-s', '--max-time', '2', 'https://api.ipify.org'], 
+                           capture_output=True, text=True).stdout.strip()
+        if ip:
+            return ip
+    except:
+        pass
+    return "Unknown"
+
+def list_proxies(config, show_status=True):
+    """Display list of all proxies with status"""
+    proxies = config.get('proxies', {})
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
+        return [], []
+    
+    print(f"{Colors.BLUE}📋 Available Proxies:{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    print("")
     
-    # Check if binary already exists
-    if os.path.exists(BINARY_PATH):
-        print(f"{Colors.YELLOW}Existing MTProxy binary found.{Colors.NC}")
-        response = input(f"{Colors.BOLD}{Colors.PURPLE}Do you want to use existing binary? (Y/n): {Colors.NC}")
-        if response.lower() in ['', 'y', 'yes']:
-            print(f"{Colors.GREEN}✅ Skipping compilation.{Colors.NC}")
-            skip_compile = True
-        else:
-            skip_compile = False
-    else:
-        skip_compile = False
+    ids = []
+    labels = []
+    for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
+        ids.append(proxy_id)
+        label = f"{idx}. {proxy.get('name', 'Unnamed')} | {proxy.get('ip')}:{proxy.get('port')}"
+        if show_status:
+            status = get_proxy_status(proxy_id)
+            if status == "active":
+                label += f" [{Colors.GREEN}Active{Colors.NC}]"
+            elif status == "inactive":
+                label += f" [{Colors.RED}Inactive{Colors.NC}]"
+            else:
+                label += f" [{Colors.YELLOW}Not installed{Colors.NC}]"
+        if proxy.get('tag'):
+            label += f" 🏷️ {Colors.MAGENTA}{proxy['tag']}{Colors.NC}"
+        labels.append(label)
+        print(f"  {label}")
     
-    if not skip_compile:
-        print(f"{Colors.CYAN}Cloning official MTProxy repository...{Colors.NC}")
-        if os.path.exists("MTProxy"):
-            shutil.rmtree("MTProxy")
-        
-        clone_result = subprocess.run(
-            ['git', 'clone', 'https://github.com/TelegramMessenger/MTProxy.git'],
-            capture_output=True, text=True
-        )
-        if clone_result.returncode != 0:
-            print(f"{Colors.RED}❌ Failed to clone repository.{Colors.NC}")
-            print(clone_result.stderr)
-            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
-            return
-        
-        os.chdir("MTProxy")
-        
-        # Patch for large PIDs
-        if os.path.exists("common/pid.c"):
-            subprocess.run(
-                ["sed", "-i", 's/assert (!(p & 0xffff0000));/\\/\\/ assert (!(p \\& 0xffff0000));/g', "common/pid.c"],
-                check=False
-            )
-        
-        print(f"{Colors.CYAN}Compiling source code...{Colors.NC}")
-        compile_result = subprocess.run(
-            ['make'], capture_output=True, text=True
-        )
-        
-        if compile_result.returncode != 0 or not os.path.exists("objs/bin/mtproto-proxy"):
-            print(f"{Colors.RED}❌ Compilation failed. Check dependencies.{Colors.NC}")
-            print(f"{Colors.YELLOW}--- Error Log ---{Colors.NC}")
-            print(compile_result.stderr[-500:])
-            os.chdir("..")
-            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
-            return
-        
-        print(f"{Colors.CYAN}Installing binary...{Colors.NC}")
-        subprocess.run(['sudo', 'cp', 'objs/bin/mtproto-proxy', BINARY_PATH], check=False)
-        subprocess.run(['sudo', 'chmod', '+x', BINARY_PATH], check=False)
-        os.chdir("..")
-        shutil.rmtree("MTProxy")
-        print(f"{Colors.GREEN}✅ MTProxy installed to {BINARY_PATH}{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    return ids, labels
+
+def get_proxy_status(proxy_id):
+    """Check if a specific proxy service is running"""
+    service_name = f"mtpulse-{proxy_id}"
+    if not os.path.exists(f"/etc/systemd/system/{service_name}.service"):
+        return "not_installed"
+    result = subprocess.run(['systemctl', 'is-active', service_name], 
+                           capture_output=True, text=True)
+    return "active" if result.stdout.strip() == "active" else "inactive"
+
+def create_service_file(proxy_id, proxy):
+    """Create systemd service file for a proxy"""
+    ip = proxy.get('ip')
+    port = proxy.get('port')
+    secret = proxy.get('secret')
+    tag = proxy.get('tag')
+    name = proxy.get('name', proxy_id)
     
-    # Create config directory
-    subprocess.run(['sudo', 'mkdir', '-p', CONFIG_DIR], check=False)
-    
-    # Download proxy-secret and proxy-multi.conf
-    print(f"{Colors.CYAN}Downloading configuration files...{Colors.NC}")
-    subprocess.run(['sudo', 'curl', '-s', 'https://core.telegram.org/getProxySecret', '-o', f'{CONFIG_DIR}/proxy-secret'], check=False)
-    subprocess.run(['sudo', 'curl', '-s', 'https://core.telegram.org/getProxyConfig', '-o', f'{CONFIG_DIR}/proxy-multi.conf'], check=False)
-    
-    # Get port from user
-    print("")
-    print(f"{Colors.CYAN}--- Configuration ---{Colors.NC}")
-    while True:
-        port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter port (default 443): {Colors.NC}").strip()
-        if not port:
-            port = "443"
-        if port.isdigit() and 1 <= int(port) <= 65535:
-            break
-        else:
-            print(f"{Colors.RED}❌ Invalid port.{Colors.NC}")
-    
-    # Generate secret
-    secret = subprocess.run(
-        ['head', '-c', '16', '/dev/urandom'], capture_output=True
-    ).stdout
-    secret = subprocess.run(['xxd', '-ps'], input=secret, capture_output=True).stdout.decode().strip()
-    print(f"{Colors.CYAN}Generated Secret: {Colors.WHITE}{secret}{Colors.NC}")
-    
-    # Create service file
-    exec_start = f"{BINARY_PATH} -u nobody -p 8888 -H {port} -S {secret} --aes-pwd {CONFIG_DIR}/proxy-secret {CONFIG_DIR}/proxy-multi.conf -M 1"
+    exec_start = f"{BINARY_PATH} -u nobody -p 8888 -H {port} -S {secret} --aes-pwd {SECRET_FILE} {MULTI_FILE} -M 1"
+    if tag:
+        exec_start += f" -P {tag}"
     
     service_content = f"""[Unit]
-Description=MTPulse MTProto Proxy (Official)
+Description=MTPulse MTProto Proxy - {name} ({ip}:{port})
 After=network.target
 
 [Service]
@@ -209,154 +156,379 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 """
     
-    with open("/tmp/mtpulse.service", 'w') as f:
+    service_path = f"/etc/systemd/system/mtpulse-{proxy_id}.service"
+    with open(service_path, 'w') as f:
         f.write(service_content)
-    subprocess.run(['sudo', 'mv', '/tmp/mtpulse.service', f'/etc/systemd/system/{SERVICE_NAME}.service'], check=False)
     
     subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
-    subprocess.run(['sudo', 'systemctl', 'enable', SERVICE_NAME], check=False)
-    subprocess.run(['sudo', 'systemctl', 'start', SERVICE_NAME], check=False)
-    
-    print(f"{Colors.GREEN}✅ MTPulse service started!{Colors.NC}")
-    
-    # Show proxy details
-    public_ip = subprocess.run(
-        ['curl', '-s', 'https://api.ipify.org'], capture_output=True, text=True
-    ).stdout.strip()
-    
-    print("")
-    print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
-    print(f"{Colors.GREEN}{Colors.BOLD}     🚀 Proxy Details{Colors.NC}")
-    print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
-    print(f"IP:     {Colors.WHITE}{public_ip}{Colors.NC}")
-    print(f"Port:   {Colors.WHITE}{port}{Colors.NC}")
-    print(f"Secret: {Colors.WHITE}{secret}{Colors.NC}")
-    print("")
-    print(f"{Colors.BOLD}{Colors.CYAN}tg://proxy?server={public_ip}&port={port}&secret={secret}{Colors.NC}")
-    print("")
-    input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
 
-def service_menu():
-    """Service management submenu"""
-    while True:
-        clear_screen()
-        print(f"{Colors.BOLD}{Colors.GREEN}⚙️ Service Management{Colors.NC}")
-        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-        print(f"  {Colors.GREEN}1.{Colors.NC} Status")
-        print(f"  {Colors.GREEN}2.{Colors.NC} Start")
-        print(f"  {Colors.GREEN}3.{Colors.NC} Stop")
-        print(f"  {Colors.GREEN}4.{Colors.NC} Restart")
-        print(f"  {Colors.GREEN}5.{Colors.NC} Logs")
-        print(f"  {Colors.GREEN}0.{Colors.NC} Back")
-        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-        
-        choice = input(f"{Colors.BOLD}{Colors.PURPLE}Select an option: {Colors.NC}").strip()
-        
-        if choice == '1':
-            subprocess.run(['sudo', 'systemctl', 'status', SERVICE_NAME], check=False)
-            input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
-        elif choice == '2':
-            subprocess.run(['sudo', 'systemctl', 'start', SERVICE_NAME], check=False)
-            print(f"{Colors.GREEN}✅ Started{Colors.NC}")
-            time.sleep(1)
-        elif choice == '3':
-            subprocess.run(['sudo', 'systemctl', 'stop', SERVICE_NAME], check=False)
-            print(f"{Colors.GREEN}✅ Stopped{Colors.NC}")
-            time.sleep(1)
-        elif choice == '4':
-            subprocess.run(['sudo', 'systemctl', 'restart', SERVICE_NAME], check=False)
-            print(f"{Colors.GREEN}✅ Restarted{Colors.NC}")
-            time.sleep(1)
-        elif choice == '5':
-            subprocess.run(['sudo', 'journalctl', '-u', SERVICE_NAME, '-n', '50', '--no-pager'], check=False)
-            input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
-        elif choice == '0':
-            break
-        else:
-            print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
-            time.sleep(1)
+def ensure_binary_installed():
+    """Ensure mtproto-proxy binary is installed"""
+    if os.path.exists(BINARY_PATH):
+        return True
+    
+    print(f"{Colors.CYAN}📥 MTProto Proxy binary not found. Compiling from source...{Colors.NC}")
+    
+    # Clean previous attempts
+    if os.path.exists("MTProxy"):
+        shutil.rmtree("MTProxy")
+    
+    clone = subprocess.run(['git', 'clone', '--depth=1', 'https://github.com/TelegramMessenger/MTProxy.git'],
+                          capture_output=True, text=True)
+    if clone.returncode != 0:
+        print(f"{Colors.RED}❌ Failed to clone repository.{Colors.NC}")
+        return False
+    
+    os.chdir("MTProxy")
+    
+    # Patch for large PIDs
+    if os.path.exists("common/pid.c"):
+        subprocess.run(["sed", "-i", 's/assert (!(p & 0xffff0000));/\\/\\/ assert (!(p \\& 0xffff0000));/g', "common/pid.c"], check=False)
+    
+    print(f"{Colors.CYAN}Compiling...{Colors.NC}")
+    compile_result = subprocess.run(['make'], capture_output=True, text=True)
+    
+    if compile_result.returncode != 0 or not os.path.exists("objs/bin/mtproto-proxy"):
+        print(f"{Colors.RED}❌ Compilation failed.{Colors.NC}")
+        print(compile_result.stderr[-500:])
+        os.chdir("..")
+        return False
+    
+    subprocess.run(['sudo', 'cp', 'objs/bin/mtproto-proxy', BINARY_PATH], check=False)
+    subprocess.run(['sudo', 'chmod', '+x', BINARY_PATH], check=False)
+    os.chdir("..")
+    shutil.rmtree("MTProxy")
+    
+    # Download config files
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    subprocess.run(['sudo', 'curl', '-s', 'https://core.telegram.org/getProxySecret', '-o', SECRET_FILE], check=False)
+    subprocess.run(['sudo', 'curl', '-s', 'https://core.telegram.org/getProxyConfig', '-o', MULTI_FILE], check=False)
+    
+    print(f"{Colors.GREEN}✅ Binary installed successfully.{Colors.NC}")
+    return True
 
-def add_sponsor():
-    """Add or remove sponsor tag"""
+def add_proxy():
+    """Add a new proxy"""
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}📝 Add Tag to Your Proxy{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.GREEN}➕ Add New Proxy{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    print("")
     
-    if not os.path.exists("/etc/systemd/system/mtpulse.service"):
-        print(f"{Colors.RED}❌ Proxy is NOT installed. Please install first.{Colors.NC}")
+    # Ensure binary is installed
+    if not ensure_binary_installed():
         input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
         return
     
-    # Read current service file
-    with open("/etc/systemd/system/mtpulse.service", 'r') as f:
-        content = f.read()
+    # Load config
+    config = load_config()
+    proxies = config.get('proxies', {})
     
-    # Extract current tag
-    import re
-    current_tag = None
-    for line in content.split('\n'):
-        if 'ExecStart=' in line:
-            match = re.search(r'-P\s+([a-f0-9]+)', line)
-            if match:
-                current_tag = match.group(1)
-                break
+    # Get proxy name
+    name = input(f"{Colors.BOLD}{Colors.PURPLE}Enter proxy name (e.g. Main, Backup): {Colors.NC}").strip()
+    if not name:
+        name = f"Proxy-{len(proxies)+1}"
     
+    # Get IP/Domain (no auto-detection)
+    while True:
+        ip = input(f"{Colors.BOLD}{Colors.PURPLE}Enter IP address or domain: {Colors.NC}").strip()
+        if ip:
+            break
+        print(f"{Colors.RED}❌ IP/Domain cannot be empty.{Colors.NC}")
+    
+    # Get port (default 80)
+    while True:
+        port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter port (default 80): {Colors.NC}").strip()
+        if not port:
+            port = "80"
+        if port.isdigit() and 1 <= int(port) <= 65535:
+            # Check if port already used
+            existing = [p for p in proxies if proxies[p].get('port') == port]
+            if existing:
+                print(f"{Colors.YELLOW}⚠️ Port {port} is already used by proxy '{proxies[existing[0]].get('name', existing[0])}'.{Colors.NC}")
+                cont = input(f"{Colors.PURPLE}Use another port? (Y/n): {Colors.NC}").strip()
+                if cont.lower() in ['n', 'no']:
+                    continue
+            break
+        else:
+            print(f"{Colors.RED}❌ Invalid port.{Colors.NC}")
+    
+    # Generate secret
+    secret = generate_secret()
+    print(f"{Colors.CYAN}Generated Secret: {Colors.WHITE}{secret}{Colors.NC}")
+    
+    # Generate proxy ID
+    proxy_id = f"p{str(len(proxies)+1)}"
+    
+    # Create proxy entry
+    proxy = {
+        "name": name,
+        "ip": ip,
+        "port": port,
+        "secret": secret,
+        "tag": None
+    }
+    
+    proxies[proxy_id] = proxy
+    config['proxies'] = proxies
+    save_config(config)
+    
+    # Create service file and start
+    create_service_file(proxy_id, proxy)
+    subprocess.run(['sudo', 'systemctl', 'enable', f'mtpulse-{proxy_id}'], check=False)
+    subprocess.run(['sudo', 'systemctl', 'start', f'mtpulse-{proxy_id}'], check=False)
+    
+    print("")
+    print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
+    print(f"{Colors.GREEN}{Colors.BOLD}     🚀 Proxy Added Successfully!{Colors.NC}")
+    print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
+    print(f"Name:   {Colors.WHITE}{name}{Colors.NC}")
+    print(f"IP:     {Colors.WHITE}{ip}{Colors.NC}")
+    print(f"Port:   {Colors.WHITE}{port}{Colors.NC}")
+    print(f"Secret: {Colors.WHITE}{secret}{Colors.NC}")
+    print("")
+    print(f"{Colors.BOLD}{Colors.CYAN}tg://proxy?server={ip}&port={port}&secret={secret}{Colors.NC}")
+    print("")
+    
+    # Show public IP option
+    public_ip = get_public_ip()
+    if public_ip and public_ip != ip:
+        print(f"{Colors.YELLOW}💡 Your public IP is: {public_ip}{Colors.NC}")
+        print(f"{Colors.YELLOW}   Use this if your server is behind NAT.{Colors.NC}")
+        print("")
+    
+    input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+
+def remove_proxy():
+    """Remove an existing proxy"""
+    clear_screen()
+    print(f"{Colors.BOLD}{Colors.RED}➖ Remove Proxy{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    
+    config = load_config()
+    proxies = config.get('proxies', {})
+    
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        return
+    
+    ids, labels = list_proxies(config, show_status=False)
+    print("")
+    print(f"{Colors.RED}⚠️ Select a proxy to REMOVE:{Colors.NC}")
+    print(f"{Colors.YELLOW}   (This will stop the service and delete it){Colors.NC}")
+    
+    try:
+        choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Enter number (1-{len(ids)}): {Colors.NC}").strip())
+        if choice < 1 or choice > len(ids):
+            print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
+            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+            return
+    except ValueError:
+        print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        return
+    
+    proxy_id = ids[choice - 1]
+    proxy = proxies[proxy_id]
+    
+    confirm = input(f"{Colors.RED}Are you sure you want to remove '{proxy.get('name', proxy_id)}'? (y/N): {Colors.NC}")
+    if confirm.lower() != 'y':
+        print(f"{Colors.YELLOW}Cancelled.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        return
+    
+    # Stop and disable service
+    service_name = f"mtpulse-{proxy_id}"
+    subprocess.run(['sudo', 'systemctl', 'stop', service_name], check=False)
+    subprocess.run(['sudo', 'systemctl', 'disable', service_name], check=False)
+    subprocess.run(['sudo', 'rm', '-f', f'/etc/systemd/system/{service_name}.service'], check=False)
+    subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
+    
+    # Remove from config
+    del proxies[proxy_id]
+    config['proxies'] = proxies
+    save_config(config)
+    
+    print(f"{Colors.GREEN}✅ Proxy '{proxy.get('name', proxy_id)}' removed successfully!{Colors.NC}")
+    input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+
+def tag_proxy():
+    """Add or remove sponsor tag for a specific proxy"""
+    clear_screen()
+    print(f"{Colors.BOLD}{Colors.GREEN}📝 Add Tag to Proxy{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    
+    config = load_config()
+    proxies = config.get('proxies', {})
+    
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies configured. Please add a proxy first.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        return
+    
+    ids, labels = list_proxies(config, show_status=False)
+    print("")
+    
+    try:
+        choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select proxy to tag (1-{len(ids)}): {Colors.NC}").strip())
+        if choice < 1 or choice > len(ids):
+            print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
+            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+            return
+    except ValueError:
+        print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        return
+    
+    proxy_id = ids[choice - 1]
+    proxy = proxies[proxy_id]
+    
+    current_tag = proxy.get('tag')
     if current_tag:
         print(f"{Colors.YELLOW}Current Tag: {Colors.BOLD}{Colors.MAGENTA}{current_tag}{Colors.NC}")
         print("")
-        response = input(f"{Colors.BOLD}{Colors.PURPLE}Do you want to remove it and set a new one? (y/N): {Colors.NC}")
+        response = input(f"{Colors.BOLD}{Colors.PURPLE}Remove current tag and set new one? (y/N): {Colors.NC}")
         if response.lower() not in ['y', 'yes']:
             return
     else:
         print(f"{Colors.YELLOW}Current Tag: {Colors.WHITE}None{Colors.NC}")
         print("")
     
-    print(f"{Colors.YELLOW}ℹ️  To get an AD Tag, you must use the official Telegram bot:{Colors.NC} {Colors.BOLD}{Colors.BLUE}@MTProxybot{Colors.NC}")
+    print(f"{Colors.YELLOW}ℹ️  To get an AD Tag, use the official Telegram bot:{Colors.NC} {Colors.BOLD}{Colors.BLUE}@MTProxybot{Colors.NC}")
     print(f"{Colors.YELLOW}    Register your proxy there and it will give you a 32-character hex tag.{Colors.NC}")
     print("")
     
     new_tag = input(f"{Colors.BOLD}{Colors.PURPLE}Enter new AD Tag (leave empty to remove): {Colors.NC}").strip()
     
-    # Remove existing -P flag
-    new_content = re.sub(r' -P [a-f0-9]+', '', content)
-    
-    # Add new tag if provided
+    # Update proxy
     if new_tag:
-        new_content = re.sub(r'(ExecStart=[^\n]+)', rf'\1 -P {new_tag}', new_content)
-        print(f"{Colors.GREEN}✅ Sponsor tag updated to: {new_tag}{Colors.NC}")
+        proxy['tag'] = new_tag
+        print(f"{Colors.GREEN}✅ Tag updated to: {new_tag}{Colors.NC}")
     else:
-        print(f"{Colors.GREEN}✅ Sponsor tag removed.{Colors.NC}")
+        proxy['tag'] = None
+        print(f"{Colors.GREEN}✅ Tag removed.{Colors.NC}")
     
-    # Write new service file
-    with open("/tmp/mtpulse.service", 'w') as f:
-        f.write(new_content)
-    subprocess.run(['sudo', 'mv', '/tmp/mtpulse.service', '/etc/systemd/system/mtpulse.service'], check=False)
+    proxies[proxy_id] = proxy
+    config['proxies'] = proxies
+    save_config(config)
     
+    # Update service file and restart
+    create_service_file(proxy_id, proxy)
     subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
-    subprocess.run(['sudo', 'systemctl', 'restart', SERVICE_NAME], check=False)
+    subprocess.run(['sudo', 'systemctl', 'restart', f'mtpulse-{proxy_id}'], check=False)
     
     input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
 
+def service_menu():
+    """Service management submenu for a specific proxy"""
+    while True:
+        clear_screen()
+        print(f"{Colors.BOLD}{Colors.GREEN}⚙️ Service Management{Colors.NC}")
+        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+        
+        config = load_config()
+        proxies = config.get('proxies', {})
+        
+        if not proxies:
+            print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
+            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+            return
+        
+        ids, labels = list_proxies(config, show_status=True)
+        print("")
+        print(f"  {Colors.GREEN}0.{Colors.NC} Back")
+        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+        
+        try:
+            choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select proxy (0-{len(ids)}): {Colors.NC}").strip())
+            if choice == 0:
+                break
+            if choice < 1 or choice > len(ids):
+                print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
+                time.sleep(1)
+                continue
+        except ValueError:
+            print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
+            time.sleep(1)
+            continue
+        
+        proxy_id = ids[choice - 1]
+        proxy = proxies[proxy_id]
+        service_name = f"mtpulse-{proxy_id}"
+        
+        # Submenu for this proxy
+        while True:
+            clear_screen()
+            print(f"{Colors.BOLD}{Colors.GREEN}⚙️ Managing: {proxy.get('name', proxy_id)} ({proxy.get('ip')}:{proxy.get('port')}){Colors.NC}")
+            print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+            
+            status = get_proxy_status(proxy_id)
+            status_text = f"{Colors.GREEN}Active{Colors.NC}" if status == "active" else f"{Colors.RED}Inactive{Colors.NC}" if status == "inactive" else f"{Colors.YELLOW}Not installed{Colors.NC}"
+            print(f"  Status: {status_text}")
+            print("")
+            print(f"  {Colors.GREEN}1.{Colors.NC} Start")
+            print(f"  {Colors.GREEN}2.{Colors.NC} Stop")
+            print(f"  {Colors.GREEN}3.{Colors.NC} Restart")
+            print(f"  {Colors.GREEN}4.{Colors.NC} Status")
+            print(f"  {Colors.GREEN}5.{Colors.NC} View Logs")
+            print(f"  {Colors.GREEN}0.{Colors.NC} Back")
+            print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+            
+            svc_choice = input(f"{Colors.BOLD}{Colors.PURPLE}Select option: {Colors.NC}").strip()
+            
+            if svc_choice == '1':
+                subprocess.run(['sudo', 'systemctl', 'start', service_name], check=False)
+                print(f"{Colors.GREEN}✅ Started{Colors.NC}")
+                time.sleep(1)
+            elif svc_choice == '2':
+                subprocess.run(['sudo', 'systemctl', 'stop', service_name], check=False)
+                print(f"{Colors.GREEN}✅ Stopped{Colors.NC}")
+                time.sleep(1)
+            elif svc_choice == '3':
+                subprocess.run(['sudo', 'systemctl', 'restart', service_name], check=False)
+                print(f"{Colors.GREEN}✅ Restarted{Colors.NC}")
+                time.sleep(1)
+            elif svc_choice == '4':
+                subprocess.run(['sudo', 'systemctl', 'status', service_name], check=False)
+                input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
+            elif svc_choice == '5':
+                subprocess.run(['sudo', 'journalctl', '-u', service_name, '-n', '30', '--no-pager'], check=False)
+                input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
+            elif svc_choice == '0':
+                break
+            else:
+                print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
+                time.sleep(1)
+
 def uninstall():
-    """Uninstall the service"""
+    """Uninstall everything"""
     clear_screen()
     print(f"{Colors.RED}⚠️ Are you sure you want to uninstall MTPulse? (y/N){Colors.NC}")
     confirm = input().strip().lower()
-    if confirm == 'y':
-        subprocess.run(['sudo', 'systemctl', 'stop', SERVICE_NAME], check=False)
-        subprocess.run(['sudo', 'systemctl', 'disable', SERVICE_NAME], check=False)
-        subprocess.run(['sudo', 'rm', '-f', f'/etc/systemd/system/{SERVICE_NAME}.service'], check=False)
-        subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
-        
-        subprocess.run(['sudo', 'rm', '-f', BINARY_PATH], check=False)
-        subprocess.run(['sudo', 'rm', '-rf', CONFIG_DIR], check=False)
-        subprocess.run(['sudo', 'rm', '-f', '/usr/local/bin/mtpulse'], check=False)
-        subprocess.run(['sudo', 'rm', '-rf', '/opt/mtpulse-proxy'], check=False)
-        subprocess.run(['sudo', 'rm', '-rf', '/var/lib/mtpulse'], check=False)
-        
-        print(f"{Colors.GREEN}✅ Uninstallation completed!{Colors.NC}")
-    else:
+    if confirm != 'y':
         print(f"{Colors.YELLOW}Cancelled.{Colors.NC}")
+        time.sleep(1)
+        return
+    
+    config = load_config()
+    proxies = config.get('proxies', {})
+    
+    # Stop and remove all proxy services
+    for proxy_id in proxies:
+        service_name = f"mtpulse-{proxy_id}"
+        subprocess.run(['sudo', 'systemctl', 'stop', service_name], check=False)
+        subprocess.run(['sudo', 'systemctl', 'disable', service_name], check=False)
+        subprocess.run(['sudo', 'rm', '-f', f'/etc/systemd/system/{service_name}.service'], check=False)
+    
+    subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
+    
+    # Remove binary and configs
+    subprocess.run(['sudo', 'rm', '-f', BINARY_PATH], check=False)
+    subprocess.run(['sudo', 'rm', '-rf', CONFIG_DIR], check=False)
+    subprocess.run(['sudo', 'rm', '-f', '/usr/local/bin/mtpulse'], check=False)
+    subprocess.run(['sudo', 'rm', '-rf', '/opt/mtpulse-proxy'], check=False)
+    
+    print(f"{Colors.GREEN}✅ Uninstallation completed!{Colors.NC}")
     time.sleep(1)
 
 def main():
@@ -365,40 +537,42 @@ def main():
         print_header()
         
         # Show status
-        status_info = get_proxy_status()
+        config = load_config()
+        proxies = config.get('proxies', {})
+        proxy_count = len(proxies)
         
         print(f"{Colors.BLUE}📊 Status:{Colors.NC}")
-        if status_info['status'] == 'not_installed':
-            print(f"  {Colors.RED}●{Colors.NC} Proxy Status: {Colors.RED}Not Installed{Colors.NC}")
-        elif status_info['status'] == 'active':
-            print(f"  {Colors.GREEN}●{Colors.NC} Proxy Status: {Colors.GREEN}Active{Colors.NC}")
-            if 'ip' in status_info and 'port' in status_info and 'secret' in status_info:
-                link = f"tg://proxy?server={status_info['ip']}&port={status_info['port']}&secret={status_info['secret']}"
-                print(f"  {Colors.BLUE}●{Colors.NC} Link: {Colors.BOLD}{Colors.CYAN}{link}{Colors.NC}")
-            if 'tag' in status_info:
-                print(f"  {Colors.BLUE}●{Colors.NC} Sponsor Tag: {Colors.BOLD}{Colors.MAGENTA}{status_info['tag']}{Colors.NC}")
+        if proxy_count == 0:
+            print(f"  {Colors.YELLOW}●{Colors.NC} Proxies: {Colors.YELLOW}None configured{Colors.NC}")
         else:
-            print(f"  {Colors.RED}●{Colors.NC} Proxy Status: {Colors.RED}Inactive{Colors.NC}")
+            active = 0
+            for pid in proxies:
+                if get_proxy_status(pid) == "active":
+                    active += 1
+            print(f"  {Colors.GREEN}●{Colors.NC} Proxies: {Colors.WHITE}{proxy_count}{Colors.NC} ({Colors.GREEN}{active}{Colors.NC} active, {Colors.RED}{proxy_count-active}{Colors.NC} inactive)")
         
         print("")
         
         print(f"{Colors.BLUE}📋 Menu:{Colors.NC}")
-        print(f"  {Colors.GREEN}1.{Colors.NC} 📥 Install MTProto Proxy")
+        print(f"  {Colors.GREEN}1.{Colors.NC} ➕ Add Proxy")
         print(f"  {Colors.GREEN}2.{Colors.NC} ⚙️ Service Management")
-        print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Your Proxy")
-        print(f"  {Colors.GREEN}4.{Colors.NC} 🗑️ Uninstall MTPulse")
+        print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
+        print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
+        print(f"  {Colors.GREEN}5.{Colors.NC} 🗑️ Uninstall MTPulse")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
         choice = input(f"{Colors.BOLD}{Colors.PURPLE}Select an option: {Colors.NC}").strip()
         
         if choice == '1':
-            install_proxy()
+            add_proxy()
         elif choice == '2':
             service_menu()
         elif choice == '3':
-            add_sponsor()
+            tag_proxy()
         elif choice == '4':
+            remove_proxy()
+        elif choice == '5':
             uninstall()
         elif choice == '0':
             print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
