@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -29,6 +29,7 @@ class Colors:
     YELLOW = '\033[1;33m'
     BLUE = '\033[0;34m'
     PURPLE = '\033[0;35m'
+    MAGENTA = PURPLE  # Alias for compatibility
     CYAN = '\033[0;36m'
     WHITE = '\033[1;37m'
     NC = '\033[0m'
@@ -216,7 +217,7 @@ def add_proxy():
     
     # Ensure binary is installed
     if not ensure_binary_installed():
-        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     # Load config
@@ -296,7 +297,7 @@ def add_proxy():
         print(f"{Colors.YELLOW}   Use this if your server is behind NAT.{Colors.NC}")
         print("")
     
-    input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
 def remove_proxy():
     """Remove an existing proxy"""
@@ -309,7 +310,7 @@ def remove_proxy():
     
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     ids, labels = list_proxies(config, show_status=False)
@@ -321,11 +322,11 @@ def remove_proxy():
         choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Enter number (1-{len(ids)}): {Colors.NC}").strip())
         if choice < 1 or choice > len(ids):
             print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
-            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+            input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
             return
     except ValueError:
         print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     proxy_id = ids[choice - 1]
@@ -334,7 +335,7 @@ def remove_proxy():
     confirm = input(f"{Colors.RED}Are you sure you want to remove '{proxy.get('name', proxy_id)}'? (y/N): {Colors.NC}")
     if confirm.lower() != 'y':
         print(f"{Colors.YELLOW}Cancelled.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     # Stop and disable service
@@ -350,7 +351,7 @@ def remove_proxy():
     save_config(config)
     
     print(f"{Colors.GREEN}✅ Proxy '{proxy.get('name', proxy_id)}' removed successfully!{Colors.NC}")
-    input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
 def tag_proxy():
     """Add or remove sponsor tag for a specific proxy"""
@@ -363,7 +364,7 @@ def tag_proxy():
     
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured. Please add a proxy first.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     ids, labels = list_proxies(config, show_status=False)
@@ -373,11 +374,11 @@ def tag_proxy():
         choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select proxy to tag (1-{len(ids)}): {Colors.NC}").strip())
         if choice < 1 or choice > len(ids):
             print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
-            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+            input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
             return
     except ValueError:
         print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     proxy_id = ids[choice - 1]
@@ -417,7 +418,7 @@ def tag_proxy():
     subprocess.run(['sudo', 'systemctl', 'daemon-reload'], check=False)
     subprocess.run(['sudo', 'systemctl', 'restart', f'mtpulse-{proxy_id}'], check=False)
     
-    input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
 def service_menu():
     """Service management submenu for a specific proxy"""
@@ -431,7 +432,7 @@ def service_menu():
         
         if not proxies:
             print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
-            input(f"{Colors.BOLD}{Colors.MAGENTA}Press Enter to return...{Colors.NC}")
+            input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
             return
         
         ids, labels = list_proxies(config, show_status=True)
