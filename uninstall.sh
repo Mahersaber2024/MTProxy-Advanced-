@@ -3,21 +3,20 @@
 
 echo "🗑️ Uninstalling MTPulse Proxy Manager..."
 
-# Stop and disable service
-sudo systemctl stop mtpulse 2>/dev/null
-sudo systemctl disable mtpulse 2>/dev/null
-sudo rm -f /etc/systemd/system/mtpulse.service
+# Stop and remove all proxy services
+for service in $(ls /etc/systemd/system/mtpulse-*.service 2>/dev/null | xargs -n1 basename); do
+  sudo systemctl stop "$service" 2>/dev/null
+  sudo systemctl disable "$service" 2>/dev/null
+  sudo rm -f "/etc/systemd/system/$service"
+done
+
 sudo systemctl daemon-reload
 
 # Remove binary and configs
 sudo rm -f /usr/local/bin/mtproto-proxy
 sudo rm -rf /etc/mtpulse
 sudo rm -f /usr/local/bin/mtpulse
-
-# Remove app directory
 sudo rm -rf /opt/mtpulse-proxy
-
-# Remove marker files
 sudo rm -rf /var/lib/mtpulse
 
 echo "✅ Uninstallation completed!"
