@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -91,8 +91,24 @@ def get_public_ip():
         pass
     return "Unknown"
 
-def list_proxies(config, show_status=True):
-    """Display list of all proxies with status"""
+def get_proxy_status(proxy_id):
+    """Check if a specific proxy service is running"""
+    service_name = f"mtpulse-{proxy_id}"
+    if not os.path.exists(f"/etc/systemd/system/{service_name}.service"):
+        return "not_installed"
+    result = subprocess.run(['systemctl', 'is-active', service_name], 
+                           capture_output=True, text=True)
+    return "active" if result.stdout.strip() == "active" else "inactive"
+
+def get_proxy_link(proxy):
+    """Generate tg:// link for a proxy"""
+    ip = proxy.get('ip')
+    port = proxy.get('port')
+    secret = proxy.get('secret')
+    return f"tg://proxy?server={ip}&port={port}&secret={secret}"
+
+def list_proxies(config, show_status=True, show_links=False):
+    """Display list of all proxies with full details"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -105,31 +121,38 @@ def list_proxies(config, show_status=True):
     labels = []
     for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
         ids.append(proxy_id)
-        label = f"{idx}. {proxy.get('name', 'Unnamed')} | {proxy.get('ip')}:{proxy.get('port')}"
-        if show_status:
-            status = get_proxy_status(proxy_id)
-            if status == "active":
-                label += f" [{Colors.GREEN}Active{Colors.NC}]"
-            elif status == "inactive":
-                label += f" [{Colors.RED}Inactive{Colors.NC}]"
-            else:
-                label += f" [{Colors.YELLOW}Not installed{Colors.NC}]"
-        if proxy.get('tag'):
-            label += f" 🏷️ {Colors.MAGENTA}{proxy['tag']}{Colors.NC}"
+        
+        # Basic info
+        name = proxy.get('name', 'Unnamed')
+        ip = proxy.get('ip', '?')
+        port = proxy.get('port', '?')
+        secret = proxy.get('secret', '?')
+        
+        # Status
+        status = get_proxy_status(proxy_id)
+        if status == "active":
+            status_text = f"{Colors.GREEN}● Active{Colors.NC}"
+        elif status == "inactive":
+            status_text = f"{Colors.RED}● Inactive{Colors.NC}"
+        else:
+            status_text = f"{Colors.YELLOW}● Not installed{Colors.NC}"
+        
+        # Tag
+        tag = proxy.get('tag')
+        tag_text = f" 🏷️ {Colors.MAGENTA}{tag}{Colors.NC}" if tag else ""
+        
+        # Build display
+        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {ip}:{port} | {status_text}{tag_text}"
         labels.append(label)
         print(f"  {label}")
+        
+        # Show full link if requested
+        if show_links and status == "active":
+            link = get_proxy_link(proxy)
+            print(f"     {Colors.CYAN}🔗 {link}{Colors.NC}")
     
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     return ids, labels
-
-def get_proxy_status(proxy_id):
-    """Check if a specific proxy service is running"""
-    service_name = f"mtpulse-{proxy_id}"
-    if not os.path.exists(f"/etc/systemd/system/{service_name}.service"):
-        return "not_installed"
-    result = subprocess.run(['systemctl', 'is-active', service_name], 
-                           capture_output=True, text=True)
-    return "active" if result.stdout.strip() == "active" else "inactive"
 
 def create_service_file(proxy_id, proxy):
     """Create systemd service file for a proxy"""
@@ -551,6 +574,10 @@ def main():
                 if get_proxy_status(pid) == "active":
                     active += 1
             print(f"  {Colors.GREEN}●{Colors.NC} Proxies: {Colors.WHITE}{proxy_count}{Colors.NC} ({Colors.GREEN}{active}{Colors.NC} active, {Colors.RED}{proxy_count-active}{Colors.NC} inactive)")
+            
+            # نمایش لیست کامل پروکسی‌ها
+            print("")
+            list_proxies(config, show_status=True, show_links=True)
         
         print("")
         
