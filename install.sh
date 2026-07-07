@@ -3,7 +3,6 @@ set -e
 
 APP_DIR="/opt/mtpulse-proxy"
 REPO_URL="https://github.com/Mahersaber2024/MTProxy-Advanced-.git"
-SERVICE_NAME="mtpulse"
 SERVICE_USER="root"
 
 GREEN='\033[0;32m'
@@ -62,27 +61,6 @@ cp -f mtpulse.py /usr/local/bin/mtpulse
 chmod +x /usr/local/bin/mtpulse
 
 # ============================================
-# Create systemd service placeholder
-# ============================================
-cat > /etc/systemd/system/mtpulse.service <<EOF
-[Unit]
-Description=MTPulse MTProto Proxy Service
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/mtproto-proxy -u nobody -p 8888 -H 443 -S YOUR_SECRET --aes-pwd /etc/mtpulse/proxy-secret /etc/mtpulse/proxy-multi.conf -M 1
-Restart=always
-User=root
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-
-# ============================================
 # Create config directory
 # ============================================
 mkdir -p /etc/mtpulse
@@ -98,5 +76,11 @@ echo -e "${BOLD}${PURPLE}🎮 HOW TO RUN${NC}"
 echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
 echo -e "  ${YELLOW}Just type:${NC} ${BOLD}${WHITE}mtpulse${NC}"
 echo ""
-echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtpulse${NC} to start managing your MTProto proxy!${NC}"
+echo -e "${BOLD}${GREEN}📋 Features:${NC}"
+echo -e "  ${WHITE}•${NC} Add multiple proxies with custom IP/Domain and port"
+echo -e "  ${WHITE}•${NC} Default port: 80"
+echo -e "  ${WHITE}•${NC} Each proxy can have its own sponsor tag"
+echo -e "  ${WHITE}•${NC} Manage each proxy individually"
+echo ""
+echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtpulse${NC} to start managing your proxies!${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
