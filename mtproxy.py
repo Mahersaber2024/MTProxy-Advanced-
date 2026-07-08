@@ -1,5 +1,6 @@
+
 #!/usr/bin/env python3
-# mtpulse.py - MTPulse MTProto Proxy Manager (Python Version)
+# mtproxy.py - MTProxy Manager for MTProto Proxy (Python Version)
 
 import os
 import sys
@@ -11,16 +12,17 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.3.1"
-SPONSOR_NAME = "HeySolo"
-SPONSOR_LINK = "https://t.me/HeySoloATM"
+VERSION = "3.3.5"
+SPONSOR_NAME = "JadeTunnel"
+SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
 PROXY_DIR = "/opt/mtprotoproxy"
 CONFIG_FILE = f"{PROXY_DIR}/config.py"
-CONFIG_DIR = "/etc/mtpulse"
+CONFIG_DIR = "/etc/mtpulse"          # kept for compatibility
 PROXIES_FILE = f"{CONFIG_DIR}/proxies.json"
 SETTINGS_FILE = f"{CONFIG_DIR}/settings.json"
-SERVICE_NAME = "mtprotoproxy"
+SERVICE_NAME = "mtprotoproxy"        # systemd service name unchanged
+TEST_SCRIPT = "/usr/local/bin/test_proxy.py"
 # ===============================
 
 # Colors (ANSI escape codes)
@@ -41,15 +43,22 @@ def clear_screen():
 
 def print_header():
     clear_screen()
-    print(f"{Colors.CYAN}{Colors.BOLD}╔═══════════════════════════════════════════════════════════════════════╗{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║       ███╗   ███╗████████╗██████╗ ██╗   ██╗██╗     ███████╗███████╗  ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║       ████╗ ████║╚══██╔══╝██╔══██╗╚██╗ ██╔╝██║     ██╔════╝██╔════╝  ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║       ██╔████╔██║   ██║   ██████╔╝ ╚████╔╝ ██║     █████╗  ███████╗  ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║       ██║╚██╔╝██║   ██║   ██╔═══╝   ╚██╔╝  ██║     ██╔══╝  ╚════██║  ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║       ██║ ╚═╝ ██║   ██║   ██║        ██║   ███████╗███████╗███████║  ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║       ╚═╝     ╚═╝   ╚═╝   ╚═╝        ╚═╝   ╚══════╝╚══════╝╚══════╝  ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}╔═════════════════════════════════════════════════════════════════════╗{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║       ██╗  █████╗  ██████╗  ███████╗                                ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║       ██║ ██╔══██╗ ██╔══██╗ ██╔════╝                                ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║       ██║ ███████║ ██║  ██║ █████╗                                  ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║  ██   ██║ ██╔══██║ ██║  ██║ ██╔══╝                                  ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║  ╚█████╔╝ ██║  ██║ ██████╔╝ ███████╗                                ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║   ╚════╝  ╚═╝  ╚═╝ ╚═════╝  ╚══════╝                                ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}║                                                                     ║{Colors.NC}")
-    print(f"{Colors.CYAN}{Colors.BOLD}║              MTProto Proxy Manager  -  v{VERSION} (Python)           ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║   ████████╗ ██╗   ██╗ ███╗   ██╗ ███╗   ██╗ ███████╗ ██╗            ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║   ╚══██╔══╝ ██║   ██║ ████╗  ██║ ████╗  ██║ ██╔════╝ ██║            ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║      ██║    ██║   ██║ ██╔██╗ ██║ ██╔██╗ ██║ █████╗   ██║            ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║      ██║    ██║   ██║ ██║╚██╗██║ ██║╚██╗██║ ██╔══╝   ██║            ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║      ██║    ╚██████╔╝ ██║ ╚████║ ██║ ╚████║ ███████╗ ███████╗       ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║      ╚═╝     ╚═════╝  ╚═╝  ╚═══╝ ╚═╝  ╚═══╝ ╚══════╝ ╚══════╝       ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║                                                                     ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║                MTProxy Manager  -  v{VERSION} (Python)               ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}║                   (Multi-Proxy per IP/Domain)                      ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}╚═══════════════════════════════════════════════════════════════════════╝{Colors.NC}")
     print("")
@@ -154,8 +163,8 @@ def get_proxy_link(proxy):
     full_secret = f"ee{secret}{domain.encode().hex()}"
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
-def list_proxies():
-    config = load_proxies()
+def list_proxies(config, show_status=True, show_links=False):
+    """Display list of proxies with optional status and links"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -184,37 +193,67 @@ def list_proxies():
         labels.append(label)
         print(f"  {label}")
         
-        if status == "active":
+        if show_links and status == "active":
             link = get_proxy_link(proxy)
             print(f"     {Colors.CYAN}🔗 {link}{Colors.NC}")
     
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     return ids, labels
 
+def list_proxies_for_tag(config):
+    """Display list of proxies showing full secret (for tag menu)"""
+    proxies = config.get('proxies', {})
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
+        return [], []
+    
+    print(f"{Colors.BLUE}📋 Available Proxies:{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    
+    ids = []
+    labels = []
+    status = get_proxy_status()
+    for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
+        ids.append(proxy_id)
+        name = proxy.get('name', 'Unnamed')
+        server = proxy.get('server', 'default')
+        port = proxy.get('port', 'default')
+        secret = proxy.get('secret', '?')
+        tag = proxy.get('tag')
+        
+        status_text = f"{Colors.GREEN}● Active{Colors.NC}" if status == "active" else f"{Colors.RED}● Inactive{Colors.NC}"
+        tag_text = f" 🏷️ {Colors.MAGENTA}{tag}{Colors.NC}" if tag else ""
+        server_text = f"@ {server}:{port}" if server != 'default' else ""
+        
+        # Show full secret (not shortened)
+        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | Secret: {Colors.WHITE}{secret}{Colors.NC} | {status_text}{tag_text}"
+        labels.append(label)
+        print(f"  {label}")
+        
+        # Show hint to use this secret for tag
+        print(f"     {Colors.YELLOW}💡 Use this secret in @MTProxybot to get AD Tag{Colors.NC}")
+    
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    return ids, labels
+
 def install_mtproto_proxy():
-    """Install mtprotoproxy automatically"""
     print(f"{Colors.CYAN}📦 Installing MTProto Proxy...{Colors.NC}")
     
-    # Install system dependencies (without pip packages here)
     subprocess.run(['apt-get', 'update', '-qq'], check=False)
     subprocess.run(['apt-get', 'install', '-y', 'python3', 'python3-pip', 'git', 'curl', 'jq', 'ca-certificates'], check=False)
     
-    # Remove old directory if exists
     if os.path.exists(PROXY_DIR):
         shutil.rmtree(PROXY_DIR)
     
-    # Clone mtprotoproxy
     clone = subprocess.run(['git', 'clone', '--depth=1', 'https://github.com/alexbers/mtprotoproxy.git', PROXY_DIR],
                           capture_output=True, text=True)
     if clone.returncode != 0:
         print(f"{Colors.RED}❌ Failed to clone repository.{Colors.NC}")
         return False
     
-    # Install Python packages with --break-system-packages
     print(f"{Colors.CYAN}📦 Installing Python packages...{Colors.NC}")
     subprocess.run(['pip3', 'install', '--break-system-packages', 'cryptography', 'uvloop'], check=False)
     
-    # Ask for default config
     print("")
     port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (default 443): {Colors.NC}").strip()
     if not port:
@@ -234,7 +273,6 @@ def install_mtproto_proxy():
         set_default_server(public_ip)
         print(f"{Colors.GREEN}✅ Auto-detected public IP: {public_ip}{Colors.NC}")
     
-    # Create initial config.py
     config_py = f"""PORT = {port}
 USERS = {{}}
 TLS_DOMAIN = "{domain}"
@@ -243,7 +281,6 @@ MODES = {{ "classic": False, "secure": False, "tls": True }}
     with open(f"{PROXY_DIR}/config.py", 'w') as f:
         f.write(config_py)
     
-    # Create systemd service
     service_content = f"""[Unit]
 Description=MTProto Proxy Service
 After=network.target
@@ -287,10 +324,7 @@ def add_proxy():
     if not name:
         name = f"Proxy-{len(proxies)+1}"
     
-    print("")
-    print(f"{Colors.CYAN}ℹ️  Leave empty to use default server address{Colors.NC}")
-    print(f"{Colors.CYAN}   (Default port: {get_default_port()}, Default domain: {get_default_domain()}){Colors.NC}")
-    server = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP/domain for this proxy: {Colors.NC}").strip()
+    server = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP/domain for this proxy (leave empty for default): {Colors.NC}").strip()
     
     port = ""
     domain = ""
@@ -313,7 +347,6 @@ def add_proxy():
     config['proxies'] = proxies
     save_proxies(config)
     
-    # Update config.py
     with open(f"{PROXY_DIR}/config.py", 'r') as f:
         content = f.read()
     
@@ -370,7 +403,7 @@ def remove_proxy():
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
-    ids, labels = list_proxies()
+    ids, labels = list_proxies(config, show_status=True, show_links=False)
     print("")
     print(f"{Colors.RED}⚠️ Select a proxy to REMOVE:{Colors.NC}")
     
@@ -417,7 +450,8 @@ def tag_proxy():
     clear_screen()
     print(f"{Colors.BOLD}{Colors.GREEN}📝 Add Tag to Proxy{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    print(f"{Colors.YELLOW}ℹ️  Get AD Tag from @MTProxybot on Telegram{Colors.NC}")
+    print(f"{Colors.YELLOW}ℹ️  To get an AD Tag, send the proxy's SECRET to @MTProxybot on Telegram.{Colors.NC}")
+    print(f"{Colors.YELLOW}   The SECRET is the 32-character hex string shown below.{Colors.NC}")
     print("")
     
     config = load_proxies()
@@ -428,7 +462,8 @@ def tag_proxy():
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
-    ids, labels = list_proxies()
+    # Show proxies with full secret
+    ids, labels = list_proxies_for_tag(config)
     print("")
     
     try:
@@ -564,6 +599,63 @@ def service_menu():
             print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
             time.sleep(1)
 
+def test_proxy_menu():
+    """Test a proxy using the test_proxy.py script"""
+    clear_screen()
+    print(f"{Colors.BOLD}{Colors.GREEN}🔍 Test Proxy{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    
+    config = load_proxies()
+    proxies = config.get('proxies', {})
+    
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies configured. Please add a proxy first.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+        return
+    
+    # Check if test script exists
+    if not os.path.exists(TEST_SCRIPT):
+        print(f"{Colors.YELLOW}⚠️ Test script not found at {TEST_SCRIPT}{Colors.NC}")
+        print(f"{Colors.YELLOW}   Please ensure test_proxy.py is installed.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+        return
+    
+    ids, labels = list_proxies(config, show_status=True, show_links=False)
+    print("")
+    print(f"  {Colors.GREEN}0.{Colors.NC} Back")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    
+    try:
+        choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select proxy to test (0-{len(ids)}): {Colors.NC}").strip())
+        if choice == 0:
+            return
+        if choice < 1 or choice > len(ids):
+            print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
+            time.sleep(1)
+            return
+    except ValueError:
+        print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
+        time.sleep(1)
+        return
+    
+    proxy_id = ids[choice - 1]
+    
+    print("")
+    print(f"{Colors.CYAN}🔍 Testing proxy with REAL MTProto connection...{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    print("")
+    
+    # Run the real test
+    cmd = [sys.executable, TEST_SCRIPT, proxy_id]
+    result = subprocess.run(cmd, capture_output=False)
+    
+    if result.returncode != 0:
+        print(f"{Colors.RED}❌ Test failed.{Colors.NC}")
+    else:
+        print(f"{Colors.GREEN}✅ Test completed.{Colors.NC}")
+    
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+
 def uninstall():
     clear_screen()
     print(f"{Colors.RED}⚠️ Are you sure you want to uninstall MTPulse? (y/N){Colors.NC}")
@@ -586,7 +678,6 @@ def uninstall():
     time.sleep(1)
 
 def setup():
-    """Setup mode - install proxy and ask for config"""
     print(f"{Colors.BOLD}{Colors.GREEN}🔧 Setting up MTProto Proxy...{Colors.NC}")
     print("")
     install_mtproto_proxy()
@@ -594,7 +685,6 @@ def setup():
     print(f"{Colors.GREEN}✅ Setup completed! Run 'mtpulse' to manage proxies.{Colors.NC}")
 
 def main():
-    # If --setup argument is passed, run setup mode
     if len(sys.argv) > 1 and sys.argv[1] == '--setup':
         setup()
         sys.exit(0)
@@ -622,7 +712,7 @@ def main():
         
         if proxy_count > 0 and status == "active":
             print("")
-            list_proxies()
+            list_proxies(config, show_status=True, show_links=True)
         
         print("")
         print(f"{Colors.BLUE}📋 Menu:{Colors.NC}")
@@ -634,6 +724,7 @@ def main():
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Set Default Server Settings")
+            print(f"  {Colors.GREEN}6.{Colors.NC} 🔍 Test Proxy")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -659,6 +750,8 @@ def main():
                 remove_proxy()
             elif choice == '5':
                 set_default_server_menu()
+            elif choice == '6':
+                test_proxy_menu()
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
