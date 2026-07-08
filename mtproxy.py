@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.3.5"
+VERSION = "3.3.6"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -163,7 +163,7 @@ def get_proxy_link(proxy):
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
-    """Display list of proxies with optional status and links"""
+    """Display list of proxies with status and tag (instead of secret)"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -180,15 +180,18 @@ def list_proxies(config, show_status=True, show_links=False):
         name = proxy.get('name', 'Unnamed')
         server = proxy.get('server', 'default')
         port = proxy.get('port', 'default')
-        secret = proxy.get('secret', '?')
         tag = proxy.get('tag')
         
         status_text = f"{Colors.GREEN}● Active{Colors.NC}" if status == "active" else f"{Colors.RED}● Inactive{Colors.NC}"
-        tag_text = f" 🏷️ {Colors.MAGENTA}{tag}{Colors.NC}" if tag else ""
         server_text = f"@ {server}:{port}" if server != 'default' else ""
         
-        secret_short = secret[:8] + "..." if len(secret) > 8 else secret
-        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | Secret: {secret_short} | {status_text}{tag_text}"
+        # نمایش تگ به جای Secret
+        if tag:
+            tag_display = f"🏷️ {Colors.MAGENTA}{tag}{Colors.NC}"
+        else:
+            tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
+        
+        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | {status_text}"
         labels.append(label)
         print(f"  {label}")
         
@@ -200,7 +203,7 @@ def list_proxies(config, show_status=True, show_links=False):
     return ids, labels
 
 def list_proxies_for_tag(config):
-    """Display list of proxies showing full secret (for tag menu)"""
+    """Display list of proxies showing full secret (without extra hints)"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -228,9 +231,7 @@ def list_proxies_for_tag(config):
         label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | Secret: {Colors.WHITE}{secret}{Colors.NC} | {status_text}{tag_text}"
         labels.append(label)
         print(f"  {label}")
-        
-        # Show hint to use this secret for tag
-        print(f"     {Colors.YELLOW}💡 Use this secret in @MTProxybot to get AD Tag{Colors.NC}")
+        # حذف پیام راهنما
     
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     return ids, labels
@@ -461,7 +462,7 @@ def tag_proxy():
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
-    # Show proxies with full secret
+    # Show proxies with full secret (hint removed inside function)
     ids, labels = list_proxies_for_tag(config)
     print("")
     
