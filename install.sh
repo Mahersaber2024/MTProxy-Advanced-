@@ -55,6 +55,8 @@ pip3 install --break-system-packages requests python-dotenv
 # ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
 cp -f mtproxy.py /usr/local/bin/mtproxy
+# تبدیل خطوط انتهایی و تنظیم مجوز
+sed -i 's/\r$//' /usr/local/bin/mtproxy
 chmod +x /usr/local/bin/mtproxy
 
 # ============================================
