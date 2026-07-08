@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.3.0"
+VERSION = "3.3.1"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -88,6 +88,16 @@ def get_default_domain():
 def set_default_server(address):
     settings = load_settings()
     settings['default_server'] = address.strip()
+    save_settings(settings)
+
+def set_default_port(port):
+    settings = load_settings()
+    settings['default_port'] = port.strip()
+    save_settings(settings)
+
+def set_default_domain(domain):
+    settings = load_settings()
+    settings['default_domain'] = domain.strip()
     save_settings(settings)
 
 def get_public_ip():
@@ -266,7 +276,7 @@ def add_proxy():
     
     if not os.path.exists(PROXY_DIR):
         print(f"{Colors.RED}❌ MTProto Proxy not installed.{Colors.NC}")
-        print(f"{Colors.YELLOW}💡 Please run the setup first: mtpulse --setup{Colors.NC}")
+        print(f"{Colors.YELLOW}💡 Please run 'mtpulse --setup' first.{Colors.NC}")
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
@@ -500,16 +510,12 @@ def set_default_server_menu():
     
     new_port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (current: {get_default_port()}): {Colors.NC}").strip()
     if new_port:
-        settings = load_settings()
-        settings['default_port'] = new_port
-        save_settings(settings)
+        set_default_port(new_port)
         print(f"{Colors.GREEN}✅ Default port set to: {new_port}{Colors.NC}")
     
     new_domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default TLS domain (current: {get_default_domain()}): {Colors.NC}").strip()
     if new_domain:
-        settings = load_settings()
-        settings['default_domain'] = new_domain
-        save_settings(settings)
+        set_default_domain(new_domain)
         print(f"{Colors.GREEN}✅ Default domain set to: {new_domain}{Colors.NC}")
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
