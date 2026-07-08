@@ -45,10 +45,17 @@ fi
 cd "$APP_DIR"
 
 # ============================================
-# Install Python dependencies with --break-system-packages
+# Install Python dependencies (compatible with all Ubuntu versions)
 # ============================================
 echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
-pip3 install --break-system-packages requests python-dotenv
+
+# Try with --break-system-packages (Ubuntu 24.04+), fallback to --user (Ubuntu 22.04 and older)
+if pip3 install --break-system-packages requests python-dotenv 2>/dev/null; then
+  echo -e "${GREEN}✅ Installed with --break-system-packages${NC}"
+else
+  echo -e "${YELLOW}⚠️ --break-system-packages not supported, using --user...${NC}"
+  pip3 install --user requests python-dotenv
+fi
 
 # ============================================
 # Install management script as 'mtproxy'
