@@ -15,6 +15,7 @@ from pathlib import Path
 CONFIG_DIR = "/etc/mtpulse"
 CONFIG_FILE = f"{CONFIG_DIR}/proxies.json"
 TEST_CONFIG_FILE = f"{CONFIG_DIR}/test_config.json"
+SETTINGS_FILE = f"{CONFIG_DIR}/settings.json"
 VENV_DIR = "/tmp/mtproto_test_venv"
 # ===============================
 
@@ -59,6 +60,29 @@ def save_test_config(config):
     with open(TEST_CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
 
+def load_settings():
+    if not os.path.exists(SETTINGS_FILE):
+        return {"default_server": "", "default_port": "443", "default_domain": "www.google.com"}
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {"default_server": "", "default_port": "443", "default_domain": "www.google.com"}
+
+def get_default_port():
+    settings = load_settings()
+    return settings.get('default_port', '443')
+
+def get_public_ip():
+    try:
+        ip = subprocess.run(['curl', '-s', '--max-time', '2', 'https://api.ipify.org'],
+                           capture_output=True, text=True).stdout.strip()
+        if ip:
+            return ip
+    except:
+        pass
+    return "Unknown"
+
 def get_api_credentials():
     config = load_test_config()
     if config.get('api_id') and config.get('api_hash'):
@@ -82,7 +106,6 @@ def get_api_credentials():
 
 def ensure_pyrogram():
     """Ensure pyrogram is installed using virtual environment"""
-    # Check if venv exists and pyrogram is installed
     if os.path.exists(VENV_DIR):
         python_path = f"{VENV_DIR}/bin/python"
         try:
@@ -98,20 +121,15 @@ def ensure_pyrogram():
     
     print(f"{Colors.CYAN}📦 Creating virtual environment and installing pyrogram...{Colors.NC}")
     
-    # Remove old venv if exists
     if os.path.exists(VENV_DIR):
         shutil.rmtree(VENV_DIR)
     
     try:
-        # Create venv
         subprocess.run([sys.executable, "-m", "venv", VENV_DIR], check=True, capture_output=True)
         python_path = f"{VENV_DIR}/bin/python"
         pip_path = f"{VENV_DIR}/bin/pip"
         
-        # Upgrade pip
         subprocess.run([pip_path, "install", "--upgrade", "pip"], check=True, capture_output=True)
-        
-        # Install pyrogram and tgcrypto
         print(f"{Colors.CYAN}   Installing pyrogram and tgcrypto...{Colors.NC}")
         subprocess.run([pip_path, "install", "pyrogram", "tgcrypto"], check=True, capture_output=True)
         
@@ -121,8 +139,6 @@ def ensure_pyrogram():
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}❌ Failed to install pyrogram:{Colors.NC}")
         print(e.stderr.decode() if e.stderr else str(e))
-        
-        # Clean up on failure
         if os.path.exists(VENV_DIR):
             shutil.rmtree(VENV_DIR)
         return None
@@ -132,22 +148,45 @@ def test_proxy_with_pyrogram(python_path, proxy_data, api_id, api_hash):
     if not python_path or not os.path.exists(python_path):
         return False, "Pyrogram not available"
     
-    ip = proxy_data.get('ip')
-    port = int(proxy_data.get('port'))
+    # Use 'server' field (not 'ip')
+    server = proxy_data.get('server')
+    if not server:
+        # fallback to default server if empty
+        settings = load_settings()
+        server = settings.get('default_server')
+        if not server:
+            server = get_public_ip()
+        if not server:
+            return False, "No server address found for proxy"
+    
+    # Get port, fallback to default if empty
+    port_str = proxy_data.get('port', '')
+    if port_str == '':
+        default_port = get_default_port()
+        port = int(default_port)
+    else:
+        try:
+            port = int(port_str)
+        except ValueError:
+            print(f"{Colors.YELLOW}⚠️ Invalid port '{port_str}', using default port {get_default_port()}{Colors.NC}")
+            port = int(get_default_port())
+    
     secret = proxy_data.get('secret')
+    if not secret:
+        return False, "No secret found for proxy"
+    
     name = proxy_data.get('name', 'Unnamed')
     
-    print(f"{Colors.CYAN}🔄 Testing proxy: {Colors.WHITE}{name} ({ip}:{port}){Colors.NC}")
+    print(f"{Colors.CYAN}🔄 Testing proxy: {Colors.WHITE}{name} ({server}:{port}){Colors.NC}")
     print(f"{Colors.CYAN}   Connecting to Telegram via MTProto...{Colors.NC}")
     
-    # Create a test script to run in venv
     test_script = f"""
 import sys
 import json
 from pyrogram import Client
 from pyrogram.errors import RPCError, Unauthorized, FloodWait
 
-ip = "{ip}"
+server = "{server}"
 port = {port}
 secret = "{secret}"
 api_id = {int(api_id)}
@@ -156,7 +195,7 @@ name = "{name}"
 
 proxy = {{
     "scheme": "mtproto",
-    "hostname": ip,
+    "hostname": server,
     "port": port,
     "secret": secret
 }}
@@ -192,12 +231,10 @@ print(json.dumps(result))
 """
     
     try:
-        # Write script to temp file
         script_file = "/tmp/mtproto_test_script.py"
         with open(script_file, 'w') as f:
             f.write(test_script)
         
-        # Run with venv python
         result = subprocess.run(
             [python_path, script_file],
             capture_output=True, text=True, check=False
@@ -206,7 +243,6 @@ print(json.dumps(result))
         if result.returncode != 0:
             return False, f"Test script failed: {result.stderr[:200]}"
         
-        # Parse JSON result
         try:
             data = json.loads(result.stdout.strip())
             return data.get('success', False), data.get('message', 'Unknown')
@@ -220,19 +256,16 @@ def test_proxy(proxy_id, proxy_data):
     """Main test function - only real MTProto test"""
     print_header()
     
-    # Step 1: Ensure pyrogram
     python_path = ensure_pyrogram()
     if not python_path:
         print(f"{Colors.RED}❌ Cannot proceed without pyrogram.{Colors.NC}")
         return False, "Pyrogram installation failed"
     
-    # Step 2: Get API credentials
     api_id, api_hash = get_api_credentials()
     if not api_id or not api_hash:
         print(f"{Colors.RED}❌ API credentials required for real test.{Colors.NC}")
         return False, "API credentials missing"
     
-    # Step 3: Real test
     return test_proxy_with_pyrogram(python_path, proxy_data, api_id, api_hash)
 
 def main():
@@ -246,7 +279,7 @@ def main():
         proxies = config.get('proxies', {})
         print("Available proxies:")
         for pid, p in proxies.items():
-            print(f"  {pid}: {p.get('name')} ({p.get('ip')}:{p.get('port')})")
+            print(f"  {pid}: {p.get('name')} ({p.get('server')}:{p.get('port')})")
         sys.exit(0)
     
     proxy_id = sys.argv[1]
