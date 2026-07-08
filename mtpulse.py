@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -156,17 +156,18 @@ def list_proxies(config, show_status=True, show_links=False):
 def create_service_file(proxy_id, proxy):
     ip = proxy.get('ip')
     port = proxy.get('port')
-    secret = proxy.get('secret')  # full secret with ee + key + domain
+    secret = proxy.get('secret')          # Full secret (ee + key + domain_hex)
     tag = proxy.get('tag')
     name = proxy.get('name', proxy_id)
     
-    # Extract the 16-byte key (32 hex chars) from the secret
-    # Secret format: ee + 32-char key + domain_hex
+    # Extract the 16-byte key (32 hex chars) from the secret.
+    # Format: ee + 32-char key + domain_hex
     if secret.startswith('ee') and len(secret) >= 34:
-        key = secret[2:34]  # 32 chars key (without 'ee' and without domain)
+        key = secret[2:34]   # 32 characters: the actual secret key
     else:
-        key = secret  # fallback for backward compatibility
+        key = secret          # Fallback for plain secret (no domain)
     
+    # Build the command line for mtproto-proxy
     exec_start = f"{BINARY_PATH} -u nobody -p 8888 -H {port} -S {key} --aes-pwd {SECRET_FILE} {MULTI_FILE} -M 1"
     if tag:
         exec_start += f" -P {tag}"
@@ -270,7 +271,6 @@ def add_proxy():
         else:
             print(f"{Colors.RED}❌ Invalid port.{Colors.NC}")
     
-    # Get domain for Fake TLS
     print("")
     print(f"{Colors.CYAN}ℹ️  Fake TLS is recommended for better compatibility with Telegram clients.{Colors.NC}")
     domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter domain for Fake TLS (default google.com): {Colors.NC}").strip()
