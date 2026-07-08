@@ -16,6 +16,7 @@ sudo systemctl daemon-reload
 sudo rm -f /usr/local/bin/mtproto-proxy
 sudo rm -rf /etc/mtpulse
 sudo rm -f /usr/local/bin/mtpulse
+sudo rm -f /usr/local/bin/test_proxy.py
 sudo rm -rf /opt/mtpulse-proxy
 sudo rm -rf /var/lib/mtpulse
 
