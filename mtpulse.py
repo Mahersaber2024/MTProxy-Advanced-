@@ -486,23 +486,19 @@ def service_menu():
                 time.sleep(1)
 
 def test_proxy_menu():
-    """Test a proxy using the test_proxy module"""
+    """Test a proxy using the real MTProto test"""
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}🔍 Test Proxy{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.GREEN}🔍 Test Proxy (Real MTProto){Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    print(f"{Colors.YELLOW}ℹ️  This test uses pyrogram to connect to Telegram via your proxy.{Colors.NC}")
+    print(f"{Colors.YELLOW}   You need Telegram API credentials from https://my.telegram.org/apps{Colors.NC}")
+    print("")
     
     config = load_config()
     proxies = config.get('proxies', {})
     
     if not proxies:
-        print(f"{Colors.YELLOW}⚠️ No proxies configured. Please add a proxy first.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-        return
-    
-    # Check if test script exists
-    if not os.path.exists(TEST_SCRIPT):
-        print(f"{Colors.YELLOW}⚠️ Test script not found at {TEST_SCRIPT}{Colors.NC}")
-        print(f"{Colors.YELLOW}   Please ensure test_proxy.py is installed.{Colors.NC}")
+        print(f"{Colors.RED}❌ No proxies configured.{Colors.NC}")
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
@@ -525,37 +521,20 @@ def test_proxy_menu():
         return
     
     proxy_id = ids[choice - 1]
-    proxy = proxies[proxy_id]
     
     print("")
-    print(f"{Colors.CYAN}🔍 Testing proxy: {Colors.WHITE}{proxy.get('name')} ({proxy.get('ip')}:{proxy.get('port')}){Colors.NC}")
+    print(f"{Colors.CYAN}🔍 Testing proxy with REAL MTProto connection...{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
-    print(f"  {Colors.GREEN}1.{Colors.NC} Quick UDP test (fast, basic)")
-    print(f"  {Colors.GREEN}2.{Colors.NC} Full MTProto test (requires pyrogram)")
-    print(f"  {Colors.GREEN}0.{Colors.NC} Back")
-    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     
-    test_choice = input(f"{Colors.BOLD}{Colors.PURPLE}Select test mode: {Colors.NC}").strip()
+    # Run the real test (no fallback)
+    cmd = [sys.executable, "/usr/local/bin/test_proxy.py", proxy_id]
+    result = subprocess.run(cmd, capture_output=False)
     
-    if test_choice == '0':
-        return
-    elif test_choice == '1':
-        # Quick UDP test
-        cmd = [sys.executable, TEST_SCRIPT, '--simple', proxy_id]
-        print(f"{Colors.CYAN}🔄 Running quick UDP test...{Colors.NC}")
-        print("")
-        subprocess.run(cmd)
-    elif test_choice == '2':
-        # Full MTProto test
-        cmd = [sys.executable, TEST_SCRIPT, proxy_id]
-        print(f"{Colors.CYAN}🔄 Running full MTProto test...{Colors.NC}")
-        print(f"{Colors.YELLOW}ℹ️  This will install pyrogram if needed and ask for API credentials.{Colors.NC}")
-        print("")
-        subprocess.run(cmd)
+    if result.returncode != 0:
+        print(f"{Colors.RED}❌ Test failed.{Colors.NC}")
     else:
-        print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
-        time.sleep(1)
+        print(f"{Colors.GREEN}✅ Test completed.{Colors.NC}")
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
