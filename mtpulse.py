@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.2.0"
+VERSION = "3.2.1"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -275,23 +275,15 @@ def add_proxy():
     if not name:
         name = f"Proxy-{len(proxies)+1}"
     
-    # Server address (optional)
+    # Server address (optional) - only ask for server, port and domain will use defaults
     print("")
     print(f"{Colors.CYAN}ℹ️  Leave empty to use default server address{Colors.NC}")
+    print(f"{Colors.CYAN}   (Default port: {get_default_port()}, Default domain: {get_default_domain()}){Colors.NC}")
     server = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP/domain for this proxy: {Colors.NC}").strip()
     
-    # Port (optional)
-    if server:
-        port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter port for this proxy (default: {get_default_port()}): {Colors.NC}").strip()
-        if not port:
-            port = ""
-    else:
-        port = ""
-    
-    # Domain (optional)
-    domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter TLS domain for this proxy (default: {get_default_domain()}): {Colors.NC}").strip()
-    if not domain:
-        domain = ""
+    # Port and domain are left empty so defaults will be used
+    port = ""
+    domain = ""
     
     secret = generate_secret()
     print(f"{Colors.CYAN}Generated Secret: {Colors.WHITE}{secret}{Colors.NC}")
@@ -345,7 +337,7 @@ def add_proxy():
     print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
     print(f"Name:   {Colors.WHITE}{name}{Colors.NC}")
     print(f"Server: {Colors.WHITE}{server if server else '(default)'}{Colors.NC}")
-    print(f"Port:   {Colors.WHITE}{port if port else '(default)'}{Colors.NC}")
+    print(f"Port:   {Colors.WHITE}{get_default_port()}{Colors.NC} (default)")
     print(f"Secret: {Colors.WHITE}{secret}{Colors.NC}")
     if tag:
         print(f"Tag:    {Colors.WHITE}{tag}{Colors.NC}")
