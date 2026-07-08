@@ -725,7 +725,6 @@ def main():
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Set Default Server Settings")
-            print(f"  {Colors.GREEN}6.{Colors.NC} 🔍 Test Proxy")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -751,8 +750,6 @@ def main():
                 remove_proxy()
             elif choice == '5':
                 set_default_server_menu()
-            elif choice == '6':
-                test_proxy_menu()
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
