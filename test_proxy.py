@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-# test_proxy.py - MTProto Proxy Tester
+# test_proxy.py - MTProto Proxy Tester (Fixed Version)
 
 import os
 import sys
 import json
 import subprocess
+import socket
+import time
 from pathlib import Path
 
 # ========== Settings ==========
@@ -77,11 +79,55 @@ def get_api_credentials():
         print(f"{Colors.RED}❌ API ID and Hash are required.{Colors.NC}")
         return None, None
     
-    # Save for future use
     save_test_config({"api_id": api_id, "api_hash": api_hash})
     print(f"{Colors.GREEN}✅ API credentials saved to {TEST_CONFIG_FILE}{Colors.NC}")
     
     return api_id, api_hash
+
+def run_shell_command(cmd):
+    """Run shell command safely"""
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        return result.returncode == 0, result.stdout + result.stderr
+    except Exception as e:
+        return False, str(e)
+
+def install_system_dependencies():
+    """Install required system packages for building"""
+    print(f"{Colors.CYAN}📦 Installing system build dependencies...{Colors.NC}")
+    commands = [
+        "apt-get update -qq",
+        "apt-get install -y python3-dev build-essential"
+    ]
+    for cmd in commands:
+        success, _ = run_shell_command(cmd)
+        if not success:
+            print(f"{Colors.YELLOW}⚠️ Could not install some system packages. Will try anyway...{Colors.NC}")
+    return True
+
+def install_pyrogram():
+    """Improved pyrogram installation"""
+    print(f"{Colors.CYAN}📦 Installing pyrogram and tgcrypto...{Colors.NC}")
+    
+    install_system_dependencies()
+    
+    install_commands = [
+        f"{sys.executable} -m pip install --upgrade pip --no-cache-dir",
+        f"{sys.executable} -m pip install pyrogram tgcrypto --no-cache-dir",
+        f"{sys.executable} -m pip install pyrogram tgcrypto --no-cache-dir --no-build-isolation"
+    ]
+    
+    for cmd in install_commands:
+        print(f"   → Running: {cmd}")
+        success, output = run_shell_command(cmd)
+        if success:
+            print(f"{Colors.GREEN}✅ Pyrogram installed successfully.{Colors.NC}")
+            return True
+        else:
+            print(f"{Colors.YELLOW}   Attempt failed. Trying next method...{Colors.NC}")
+    
+    print(f"{Colors.RED}❌ Failed to install pyrogram with all methods.{Colors.NC}")
+    return False
 
 def check_pyrogram():
     """Check if pyrogram is installed"""
@@ -90,18 +136,6 @@ def check_pyrogram():
         return True, pyrogram.__version__
     except ImportError:
         return False, None
-
-def install_pyrogram():
-    """Install pyrogram using pip"""
-    print(f"{Colors.CYAN}📦 Installing pyrogram...{Colors.NC}")
-    try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "pyrogram", "tgcrypto"], 
-                      capture_output=True, text=True, check=True)
-        print(f"{Colors.GREEN}✅ Pyrogram installed successfully.{Colors.NC}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"{Colors.RED}❌ Failed to install pyrogram: {e}{Colors.NC}")
-        return False
 
 def test_proxy_with_pyrogram(proxy_data, api_id, api_hash):
     """Test proxy using pyrogram"""
@@ -128,7 +162,6 @@ def test_proxy_with_pyrogram(proxy_data, api_id, api_hash):
     print(f"{Colors.CYAN}   Connecting to Telegram via MTProto...{Colors.NC}")
     
     try:
-        # Use a temporary session file
         session_file = f"/tmp/test_session_{os.getpid()}"
         
         app = Client(
@@ -139,54 +172,34 @@ def test_proxy_with_pyrogram(proxy_data, api_id, api_hash):
             workdir="/tmp"
         )
         
-        # Try to connect
         app.connect()
         
-        # Try a simple API call - get the bot's own info (or user info)
-        # We'll use get_me() to check if we can authenticate
-        # If it works, the proxy is good
         try:
-            # Check if we can get our own user info
             me = app.get_me()
             if me:
                 print(f"{Colors.GREEN}✅ Proxy is WORKING!{Colors.NC}")
                 print(f"   Connected as: {Colors.WHITE}{me.first_name or me.username or me.id}{Colors.NC}")
                 app.disconnect()
                 return True, f"Connected as {me.first_name or me.username or me.id}"
-            else:
-                app.disconnect()
-                return False, "No user data received"
-                
         except Unauthorized:
-            print(f"{Colors.YELLOW}⚠️ Proxy connected but authentication failed.{Colors.NC}")
-            print(f"   This might mean the proxy works but you need to login.")
+            print(f"{Colors.YELLOW}⚠️ Proxy connected but authentication required.{Colors.NC}")
             app.disconnect()
             return True, "Connected (auth required)"
-            
-        except RPCError as e:
+        except (RPCError, FloodWait) as e:
             app.disconnect()
-            print(f"{Colors.RED}❌ RPC Error: {e}{Colors.NC}")
-            return False, f"RPC Error: {e}"
-            
-        except FloodWait as e:
-            app.disconnect()
-            print(f"{Colors.YELLOW}⏳ Rate limited. Try again in {e.value} seconds.{Colors.NC}")
-            return False, f"Flood wait {e.value}s"
+            return False, f"Error: {e}"
             
     except Exception as e:
         error_msg = str(e)
         if "Connection" in error_msg or "timeout" in error_msg.lower():
-            print(f"{Colors.RED}❌ Connection failed - proxy might be down or unreachable{Colors.NC}")
+            print(f"{Colors.RED}❌ Connection failed - proxy might be down.{Colors.NC}")
             return False, f"Connection failed: {error_msg[:100]}"
         else:
             print(f"{Colors.RED}❌ Error: {error_msg[:200]}{Colors.NC}")
             return False, f"Error: {error_msg[:200]}"
 
 def test_proxy_simple(proxy_data):
-    """Simple UDP port test using nc/socat"""
-    import socket
-    import time
-    
+    """Simple UDP port test"""
     ip = proxy_data.get('ip')
     port = int(proxy_data.get('port'))
     name = proxy_data.get('name', 'Unnamed')
@@ -194,34 +207,25 @@ def test_proxy_simple(proxy_data):
     print(f"{Colors.CYAN}🔄 Testing UDP connectivity: {Colors.WHITE}{name} ({ip}:{port}){Colors.NC}")
     
     try:
-        # Try to send a UDP packet
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(3)
-        
-        # Send a simple MTProto ping-like packet (not real, just for connectivity test)
-        # Telegram MTProto uses a specific protocol, but we can't simulate it fully
-        # Just check if the port is reachable
         start = time.time()
         sock.sendto(b"\x00\x00\x00\x00", (ip, port))
+        
         try:
             data, addr = sock.recvfrom(1024)
             elapsed = time.time() - start
             print(f"{Colors.GREEN}✅ UDP port is reachable (response in {elapsed:.2f}s){Colors.NC}")
-            sock.close()
             return True, f"UDP reachable ({elapsed:.2f}s)"
         except socket.timeout:
             print(f"{Colors.YELLOW}⚠️ UDP port reachable but no response (timeout){Colors.NC}")
             print(f"   This is normal - MTProto doesn't respond to arbitrary packets")
-            sock.close()
             return True, "UDP port open (no response)"
-        except Exception as e:
-            print(f"{Colors.YELLOW}⚠️ UDP test failed: {e}{Colors.NC}")
-            sock.close()
-            return False, f"UDP error: {e}"
-            
     except Exception as e:
-        print(f"{Colors.RED}❌ UDP connectivity test failed: {e}{Colors.NC}")
+        print(f"{Colors.RED}❌ UDP test failed: {e}{Colors.NC}")
         return False, f"UDP test failed: {e}"
+    finally:
+        sock.close()
 
 def test_proxy(proxy_id, proxy_data, mode='full'):
     """Main test function"""
@@ -230,38 +234,31 @@ def test_proxy(proxy_id, proxy_data, mode='full'):
     if mode == 'simple':
         return test_proxy_simple(proxy_data)
     
-    # Full test with pyrogram
-    has_pyrogram, version = check_pyrogram()
+    # Full test
+    has_pyrogram, _ = check_pyrogram()
     if not has_pyrogram:
         print(f"{Colors.YELLOW}⚠️ Pyrogram not found.{Colors.NC}")
-        install = input(f"{Colors.BOLD}{Colors.PURPLE}Install pyrogram now? (Y/n): {Colors.NC}").strip()
-        if install.lower() not in ['', 'y', 'yes']:
-            print(f"{Colors.YELLOW}Skipping full test. Use simple UDP test instead.{Colors.NC}")
+        install = input(f"{Colors.BOLD}{Colors.PURPLE}Install pyrogram now? (Y/n): {Colors.NC}").strip().lower()
+        
+        if install not in ['', 'y', 'yes']:
             return test_proxy_simple(proxy_data)
         
         if not install_pyrogram():
             print(f"{Colors.YELLOW}Falling back to UDP test.{Colors.NC}")
             return test_proxy_simple(proxy_data)
         
-        # Re-import after installation
-        try:
-            from pyrogram import Client
-        except ImportError:
-            print(f"{Colors.RED}❌ Pyrogram still not available. Falling back to UDP test.{Colors.NC}")
+        # Re-check
+        if not check_pyrogram()[0]:
             return test_proxy_simple(proxy_data)
     
-    # Get API credentials
     api_id, api_hash = get_api_credentials()
     if not api_id or not api_hash:
-        print(f"{Colors.YELLOW}⚠️ Cannot test with pyrogram without API credentials.{Colors.NC}")
         return test_proxy_simple(proxy_data)
     
     return test_proxy_with_pyrogram(proxy_data, api_id, api_hash)
 
 def main():
     """CLI entry point"""
-    import sys
-    
     if len(sys.argv) < 2:
         print("Usage: python3 test_proxy.py <proxy_id>")
         print("  or:  python3 test_proxy.py --list")
