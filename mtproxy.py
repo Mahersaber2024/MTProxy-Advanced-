@@ -144,22 +144,19 @@ def get_proxy_status():
     return "active" if result.stdout.strip() == "active" else "inactive"
 
 def get_proxy_link(proxy):
-    server = proxy.get('server', '')
-    if not server:
-        server = get_default_server()
-        if not server:
-            server = get_public_ip()
-    
-    port = proxy.get('port', '')
-    if not port:
-        port = get_default_port()
-    
-    domain = proxy.get('domain', '')
-    if not domain:
-        domain = get_default_domain()
+    """Generate correct tg:// link - Fixed for AD_TAG"""
+    server = proxy.get('server', '') or get_default_server() or get_public_ip()
+    port = proxy.get('port', '') or get_default_port()
+    domain = proxy.get('domain', '') or get_default_domain()
     
     secret = proxy.get('secret')
-    full_secret = f"ee{secret}{domain.encode().hex()}"
+    tag = proxy.get('tag')
+    
+    if tag:  # With AD Tag
+        full_secret = f"ee{secret}"                    # Important fix
+    else:    # Without tag (original behavior)
+        full_secret = f"ee{secret}{domain.encode().hex()}"
+    
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
@@ -462,7 +459,6 @@ def tag_proxy():
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
-    # Show proxies with full secret (hint removed inside function)
     ids, labels = list_proxies_for_tag(config)
     print("")
     
@@ -510,11 +506,17 @@ def tag_proxy():
         print(f"{Colors.GREEN}✅ Tag removed.{Colors.NC}")
     
     proxies[proxy_id] = proxy
-    save_proxies(load_proxies())
+    save_proxies(config)
     
     subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
-    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-
+    
+    # Show correct link after updating tag
+    link = get_proxy_link(proxy)
+    print(f"\n{Colors.CYAN}New Proxy Link:{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.CYAN}{link}{Colors.NC}")
+    
+    input(f"\n{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+    
 def set_default_server_menu():
     clear_screen()
     print(f"{Colors.BOLD}{Colors.GREEN}🌐 Set Default Server Settings{Colors.NC}")
