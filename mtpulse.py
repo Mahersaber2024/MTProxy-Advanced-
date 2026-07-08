@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -72,9 +72,22 @@ def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
 
-def generate_secret():
-    secret = subprocess.run(['head', '-c', '16', '/dev/urandom'], capture_output=True).stdout
-    return subprocess.run(['xxd', '-ps'], input=secret, capture_output=True).stdout.decode().strip()
+def generate_secret(domain="google.com"):
+    """
+    Generate a Fake TLS secret for MTProto proxy.
+    Format: ee + 16-byte random key (hex) + domain (hex)
+    Example: ee2fbc0721b217c4b96ae56ca47ccc5b8a676f6f676c652e636f6d
+    """
+    # 1. Generate 16-byte random key (32 hex chars)
+    key_bytes = subprocess.run(['head', '-c', '16', '/dev/urandom'], capture_output=True).stdout
+    key_hex = subprocess.run(['xxd', '-ps'], input=key_bytes, capture_output=True).stdout.decode().strip()
+    
+    # 2. Encode domain to hex
+    domain_hex = domain.encode('utf-8').hex()
+    
+    # 3. Build Fake TLS secret: ee + key + domain_hex
+    secret = f"ee{key_hex}{domain_hex}"
+    return secret
 
 def get_public_ip():
     try:
@@ -250,8 +263,16 @@ def add_proxy():
         else:
             print(f"{Colors.RED}❌ Invalid port.{Colors.NC}")
     
-    secret = generate_secret()
-    print(f"{Colors.CYAN}Generated Secret: {Colors.WHITE}{secret}{Colors.NC}")
+    # Get domain for Fake TLS
+    print("")
+    print(f"{Colors.CYAN}ℹ️  Fake TLS is recommended for better compatibility with Telegram clients.{Colors.NC}")
+    domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter domain for Fake TLS (default google.com): {Colors.NC}").strip()
+    if not domain:
+        domain = "google.com"
+    
+    secret = generate_secret(domain)
+    print(f"{Colors.CYAN}Generated Secret (Fake TLS): {Colors.WHITE}{secret}{Colors.NC}")
+    print(f"{Colors.CYAN}   Using domain: {Colors.WHITE}{domain}{Colors.NC}")
     
     proxy_id = f"p{str(len(proxies)+1)}"
     
@@ -279,6 +300,7 @@ def add_proxy():
     print(f"IP:     {Colors.WHITE}{ip}{Colors.NC}")
     print(f"Port:   {Colors.WHITE}{port}{Colors.NC}")
     print(f"Secret: {Colors.WHITE}{secret}{Colors.NC}")
+    print(f"Domain: {Colors.WHITE}{domain}{Colors.NC}")
     print("")
     print(f"{Colors.BOLD}{Colors.CYAN}tg://proxy?server={ip}&port={port}&secret={secret}{Colors.NC}")
     print("")
