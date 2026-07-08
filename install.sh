@@ -55,9 +55,20 @@ pip3 install --break-system-packages requests python-dotenv
 # ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
 cp -f mtproxy.py /usr/local/bin/mtproxy
-# تبدیل خطوط انتهایی و تنظیم مجوز
 sed -i 's/\r$//' /usr/local/bin/mtproxy
 chmod +x /usr/local/bin/mtproxy
+
+# ============================================
+# Install test script (test_proxy.py)
+# ============================================
+echo -e "${BLUE}📋 Installing test script...${NC}"
+if [ -f test_proxy.py ]; then
+  cp -f test_proxy.py /usr/local/bin/test_proxy.py
+  sed -i 's/\r$//' /usr/local/bin/test_proxy.py
+  chmod +x /usr/local/bin/test_proxy.py
+else
+  echo -e "${YELLOW}⚠️ test_proxy.py not found in repository. Skipping.${NC}"
+fi
 
 # ============================================
 # Create config directory
