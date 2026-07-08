@@ -1,156 +1,248 @@
-# MTPulse Proxy Manager
+# MTProxy Manager
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Ubuntu%20%7C%20Debian-lightgrey)]()
-[![Python](https://img.shields.io/badge/python-3.8%2B-yellow.svg)]()
+A comprehensive management tool for **MTProto Proxy** (Telegram Proxy) on Ubuntu and Debian servers.
 
-🚀 **MTPulse** is a lightweight, interactive management tool for **MTProto Proxy** (Telegram Proxy) on Ubuntu and Debian servers.
-
-It helps you install, manage, configure, and remove MTProto Proxy with a simple menu-driven interface, similar in style to `x3-tf`.
+Developed in Python, it provides an interactive menu to install, manage, configure, test, and remove MTProto proxy instances with ease. It supports multiple proxies with different IP addresses, ports, secrets, and domains, making it useful for personal deployments and multi-instance server management.
 
 ---
 
-## Features
+## ✨ Features
 
-- Install MTProto Proxy from source.
-- Manage the proxy service with start, stop, restart, and status commands.
-- View live logs and troubleshoot easily.
-- Add or remove sponsor tags using `@MTProxybot` AD tags.
-- Uninstall the proxy and clean up installed files.
-- Colorful interactive terminal menu.
-- Lightweight Python-based implementation.
-- Sponsored by [HeySolo](https://t.me/HeySoloATM).
-
----
-
-## Requirements
-
-- Ubuntu 20.04+ or Debian 11+.
-- Python 3.8 or newer.
-- Root or sudo access.
-- Required packages: `git`, `make`, `build-essential`, `libssl-dev`, `zlib1g-dev`, `curl`, `wget`, `xxd`, `figlet`.
+- 📥 **Automatic Installation** – Installs MTProto Proxy from the official source during setup.
+- ➕ **Add Multiple Proxies** – Each proxy can have its own IP/domain, port, secret, and TLS domain.
+- ⚙️ **Service Management** – Start, stop, restart, check status, and view logs for each proxy individually.
+- 📝 **Sponsor Tag Support** – Assign AD tags to individual proxies from `@MTProxybot`.
+- 🔍 **Real Proxy Testing** – Test proxies using `pyrogram` to verify a real MTProto connection to Telegram.
+- 🏷️ **Tag Status Display** – View proxy tags directly in the main menu.
+- 🌐 **Custom Server Address** – Set a default or per-proxy IP/domain for client connections.
+- 🎨 **Beautiful Interactive Menu** – Colorful, user-friendly CLI interface.
+- 🗑️ **Uninstallation Support** – Remove the project and installed components cleanly.
 
 ---
 
-## Quick Installation
+## 📋 Requirements
 
-Run the installer on your server:
+- **OS**: Ubuntu 22.04+ or Debian 12+
+- **Python**: 3.8+
+- **Root/Sudo**: Required for installation and management
+- **Network**: A public IP or domain is recommended
+- **Firewall**: Required ports must be open
+- **Dependencies**: Installed automatically by the installer script
+
+---
+
+## 🚀 Quick Installation
+
+Run this command on your server:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/install.sh)
 ```
 
----
-
-## Usage
-
-After installation, open the management menu with:
-
-```bash
-mtpulse
-```
-
-Or, if the script is installed with elevated permissions:
-
-```bash
-sudo mtpulse
-```
-
-The menu lets you manage the proxy, change settings, and view status without manually editing files.
+Follow the interactive menu to install and manage your proxy instances.
 
 ---
 
-## Service Management
-
-Use these commands to control the service:
+## 📦 Manual Installation
 
 ```bash
-systemctl status mtpulse.service
-systemctl start mtpulse.service
-systemctl stop mtpulse.service
-systemctl restart mtpulse.service
-journalctl -u mtpulse.service -f
-```
-
-If your project uses a separate timer or update script, document it here as well.
-
----
-
-## Sponsored Tag
-
-This project supports adding a sponsor tag from `@MTProxybot` for Telegram proxy traffic.
-
-Example usage:
-
-- Add sponsor tag.
-- Restart the proxy service.
-- Verify the proxy is working correctly.
-
----
-
-## Uninstallation
-
-To remove MTPulse and its installed components:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/uninstall.sh)
+git clone https://github.com/Mahersaber2024/MTProxy-Advanced-.git
+cd MTProxy-Advanced-
+chmod +x install.sh
+sudo ./install.sh
 ```
 
 ---
 
-## Files
+## ⚙️ How It Works
 
-- `install.sh` — Main installation script.
-- `manager.py` — Interactive management menu.
-- `proxy.py` or main runtime script — Proxy control logic, if present.
-- `uninstall.sh` — Removal script.
-- `requirements.txt` — Python dependencies.
+This project simplifies MTProto proxy management by wrapping the official proxy binary and service logic in a Python-based control panel.
+
+Typical workflow:
+
+1. Install the proxy binary.
+2. Generate or define a secret.
+3. Set a listening port.
+4. Add an optional sponsor tag.
+5. Start the service.
+6. Test connectivity.
+7. Manage multiple proxy instances from the same interface.
+
+Telegram’s MTProxy setup normally uses the official proxy components and requires a secret plus configuration files from Telegram’s endpoints [web:11]. Sponsor tags are commonly attached through `@MTProxybot` as part of the proxy promotion workflow [web:11][web:12].
 
 ---
 
-## Notes
+## 🔐 Proxy Setup Notes
 
-- Make sure ports required by MTProto Proxy are open.
-- Run the installer as root or with sudo privileges.
-- If the menu does not open, check that the installed script has executable permissions and uses Unix line endings.
+Before starting a proxy, make sure you have:
+
+- A generated MTProto secret.
+- An open TCP port on the server firewall.
+- A valid public IP or domain.
+- An optional sponsor tag from `@MTProxybot`.
+
+A standard MTProxy deployment uses the proxy binary with a secret and Telegram’s configuration files [web:11][web:13]. In many setups, the proxy is run as a `systemd` service for stable startup and lifecycle control [web:12][web:13].
 
 ---
 
-## Troubleshooting
+## 🧪 Testing
 
-### Menu does not start
-Check whether the installed launcher exists and is executable:
+The project includes real proxy testing using `pyrogram`, which helps confirm that the proxy can actually connect to Telegram rather than only checking whether the port is open.
+
+Recommended checks:
+
+- Service status.
+- Log output.
+- Telegram connection test.
+- Port reachability from outside the server.
+
+---
+
+## 🖥️ Menu Options
+
+The interactive menu may include actions such as:
+
+- Install MTProto Proxy.
+- Add new proxy.
+- Remove proxy.
+- Start proxy.
+- Stop proxy.
+- Restart proxy.
+- Check proxy status.
+- View proxy logs.
+- Test proxy connection.
+- Manage AD tag.
+- Show proxy list.
+- Uninstall project components.
+
+---
+
+## 🗑️ Uninstallation
+
+To remove **MTProxy Manager** and its installed components, use the project’s uninstall option if it is available in the menu.
+
+If your project includes a dedicated uninstall script, run:
 
 ```bash
-which mtpulse
-ls -l /usr/local/bin/mtpulse
+sudo bash uninstall.sh
 ```
 
-### Service fails to start
-View logs:
+If there is no script yet, uninstallation usually requires manual cleanup of the installed files and services.
+
+### Manual cleanup may include:
+
+- Stopping and disabling related `systemd` services.
+- Removing proxy binaries and project files.
+- Deleting configuration directories.
+- Removing log files.
+- Reloading `systemd` after cleanup.
+
+Example commands:
 
 ```bash
-journalctl -u mtpulse.service -n 50 --no-pager
+sudo systemctl stop MTProxy.service
+sudo systemctl disable MTProxy.service
+sudo rm -f /etc/systemd/system/MTProxy.service
+sudo systemctl daemon-reload
+sudo systemctl reset-failed
 ```
 
-### Permission issues
-Run the commands as root or with `sudo`.
+Then remove the project files and related data:
+
+```bash
+sudo rm -rf /opt/MTProxy
+sudo rm -rf /path/to/MTProxy-Advanced-
+```
+
+> Make sure to back up any important proxy configuration before uninstalling.
 
 ---
 
-## Contributing
+---
 
-Pull requests and improvements are welcome.  
-If you want to contribute, fork the repository, create a feature branch, and submit a pull request.
+## 🌍 Supported Platforms
+
+- Ubuntu 22.04+.
+- Debian 12+.
+- VPS or dedicated Linux servers.
+- Cloud servers with public IPs.
 
 ---
 
-## License
+## 🧱 Firewall Requirements
 
-Add your preferred license here, such as MIT.
+Make sure the required proxy port is allowed through your firewall.
+
+Example with UFW:
+
+```bash
+sudo ufw allow 443/tcp
+sudo ufw reload
+```
+
+If you use a different port, replace `443` with your chosen port.
 
 ---
 
-## Disclaimer
+## 🧰 Dependencies
 
-Use this tool only on servers and proxies that you own or are authorized to manage.
+The installer may include packages such as:
+
+- `python3`
+- `python3-pip`
+- `git`
+- `curl`
+- `screen` or `tmux`
+- `systemd`
+- `pyrogram` for testing
+
+---
+
+## 🧭 Example Proxy Flow
+
+1. Install the project.
+2. Choose “Add Proxy” from the menu.
+3. Enter server IP or domain.
+4. Set proxy port.
+5. Paste or generate MTProto secret.
+6. Optionally set sponsor tag.
+7. Start the proxy.
+8. Test the proxy connection.
+
+---
+
+## 🛡️ Security Tips
+
+- Use a strong secret for every proxy.
+- Keep the server updated.
+- Restrict SSH access.
+- Monitor logs regularly.
+- Avoid exposing unnecessary ports.
+- Use a domain with a stable DNS setup when possible.
+
+---
+
+## 🐞 Troubleshooting
+
+### Proxy does not start
+- Check if the port is already in use.
+- Verify that the secret is valid.
+- Confirm that the system service file is correct.
+
+### Telegram connection fails
+- Make sure the server can reach Telegram endpoints.
+- Check firewall and NAT rules.
+- Verify that the proxy config files are present and current.
+
+### Sponsor tag is not visible
+- Confirm the tag from `@MTProxybot`.
+- Restart the proxy after applying the tag.
+- Recheck the proxy configuration.
+
+---
+
+## 📌 Disclaimer
+
+This project is provided for legitimate proxy management and administration purposes. Users are responsible for complying with local laws, hosting provider policies, and Telegram’s terms of service.
+
+---
