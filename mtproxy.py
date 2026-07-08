@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # mtproxy.py - MTProxy Manager for MTProto Proxy (Python Version)
 
@@ -18,10 +17,10 @@ SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
 PROXY_DIR = "/opt/mtprotoproxy"
 CONFIG_FILE = f"{PROXY_DIR}/config.py"
-CONFIG_DIR = "/etc/mtpulse"          # kept for compatibility
+CONFIG_DIR = "/etc/mtpulse"
 PROXIES_FILE = f"{CONFIG_DIR}/proxies.json"
 SETTINGS_FILE = f"{CONFIG_DIR}/settings.json"
-SERVICE_NAME = "mtprotoproxy"        # systemd service name unchanged
+SERVICE_NAME = "mtprotoproxy"
 TEST_SCRIPT = "/usr/local/bin/test_proxy.py"
 # ===============================
 
@@ -313,7 +312,7 @@ def add_proxy():
     
     if not os.path.exists(PROXY_DIR):
         print(f"{Colors.RED}❌ MTProto Proxy not installed.{Colors.NC}")
-        print(f"{Colors.YELLOW}💡 Please run 'mtpulse --setup' first.{Colors.NC}")
+        print(f"{Colors.YELLOW}💡 Please run 'mtproxy --setup' first.{Colors.NC}")
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
@@ -658,7 +657,7 @@ def test_proxy_menu():
 
 def uninstall():
     clear_screen()
-    print(f"{Colors.RED}⚠️ Are you sure you want to uninstall MTPulse? (y/N){Colors.NC}")
+    print(f"{Colors.RED}⚠️ Are you sure you want to uninstall MTProxy? (y/N){Colors.NC}")
     confirm = input().strip().lower()
     if confirm != 'y':
         print(f"{Colors.YELLOW}Cancelled.{Colors.NC}")
@@ -672,7 +671,8 @@ def uninstall():
     
     subprocess.run(['rm', '-rf', PROXY_DIR], check=False)
     subprocess.run(['rm', '-rf', CONFIG_DIR], check=False)
-    subprocess.run(['rm', '-f', '/usr/local/bin/mtpulse'], check=False)
+    subprocess.run(['rm', '-f', '/usr/local/bin/mtproxy'], check=False)
+    subprocess.run(['rm', '-f', TEST_SCRIPT], check=False)
     
     print(f"{Colors.GREEN}✅ Uninstallation completed!{Colors.NC}")
     time.sleep(1)
@@ -682,7 +682,7 @@ def setup():
     print("")
     install_mtproto_proxy()
     print("")
-    print(f"{Colors.GREEN}✅ Setup completed! Run 'mtpulse' to manage proxies.{Colors.NC}")
+    print(f"{Colors.GREEN}✅ Setup completed! Run 'mtproxy' to manage proxies.{Colors.NC}")
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == '--setup':
@@ -701,7 +701,7 @@ def main():
         print(f"{Colors.BLUE}📊 Status:{Colors.NC}")
         if not os.path.exists(PROXY_DIR):
             print(f"  {Colors.YELLOW}●{Colors.NC} Proxy: {Colors.YELLOW}Not installed{Colors.NC}")
-            print(f"  {Colors.YELLOW}💡 Run 'mtpulse --setup' to install the proxy{Colors.NC}")
+            print(f"  {Colors.YELLOW}💡 Run 'mtproxy --setup' to install the proxy{Colors.NC}")
         elif status == "active":
             print(f"  {Colors.GREEN}●{Colors.NC} Proxy: {Colors.GREEN}Active{Colors.NC}")
             print(f"  {Colors.BLUE}●{Colors.NC} Default: {Colors.WHITE}{default_server if default_server else 'auto-detect'}:{default_port}{Colors.NC}")
