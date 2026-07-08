@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-APP_DIR="/opt/mtpulse-proxy"
+APP_DIR="/opt/mtproto-proxy-manager"
 REPO_URL="https://github.com/Mahersaber2024/MTProxy-Advanced-.git"
 SERVICE_USER="root"
 
@@ -18,10 +18,16 @@ BOLD='\033[1m'
 echo -e "${BOLD}${CYAN}🚀 Installing MTPulse Proxy Manager...${NC}"
 echo ""
 
+# ============================================
+# Install prerequisites
+# ============================================
 export DEBIAN_FRONTEND=noninteractive
 apt update
-apt install -y git python3 python3-venv python3-pip curl wget xxd figlet make build-essential libssl-dev zlib1g-dev
+apt install -y git python3 python3-pip curl wget xxd figlet
 
+# ============================================
+# Clone or update the project
+# ============================================
 if [ ! -d "$APP_DIR/.git" ]; then
   rm -rf "$APP_DIR"
   git clone --depth 1 "$REPO_URL" "$APP_DIR" || {
@@ -38,22 +44,29 @@ fi
 
 cd "$APP_DIR"
 
-echo -e "${BLUE}🐍 Creating virtual environment...${NC}"
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+# ============================================
+# Install Python dependencies with --break-system-packages
+# ============================================
+echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
+pip3 install --break-system-packages requests python-dotenv
 
+# ============================================
+# Install management script
+# ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
 cp -f mtpulse.py /usr/local/bin/mtpulse
 chmod +x /usr/local/bin/mtpulse
 
-# نصب ماژول تست
-echo -e "${BLUE}📋 Installing test module...${NC}"
-cp -f test_proxy.py /usr/local/bin/test_proxy.py
-chmod +x /usr/local/bin/test_proxy.py
-
+# ============================================
+# Create config directory
+# ============================================
 mkdir -p /etc/mtpulse
+
+# ============================================
+# Run the script to install the proxy automatically
+# ============================================
+echo -e "${BLUE}🔧 Setting up MTProto Proxy...${NC}"
+python3 /usr/local/bin/mtpulse --setup
 
 echo ""
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
@@ -66,9 +79,5 @@ echo -e "${BOLD}${PURPLE}🎮 HOW TO RUN${NC}"
 echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
 echo -e "  ${YELLOW}Just type:${NC} ${BOLD}${WHITE}mtpulse${NC}"
 echo ""
-echo -e "${BOLD}${GREEN}📋 New Features:${NC}"
-echo -e "  ${WHITE}•${NC} Test Proxy: Check if a proxy works"
-echo -e "  ${WHITE}•${NC} Two test modes: Quick UDP or Full MTProto"
-echo ""
-echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtpulse${NC} to start managing your proxies!${NC}"
+echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtpulse${NC} to start managing your proxies!{NC}"
 echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
