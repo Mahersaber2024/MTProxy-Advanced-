@@ -18,16 +18,10 @@ BOLD='\033[1m'
 echo -e "${BOLD}${CYAN}🚀 Installing MTPulse Proxy Manager...${NC}"
 echo ""
 
-# ============================================
-# Install prerequisites
-# ============================================
 export DEBIAN_FRONTEND=noninteractive
 apt update
 apt install -y git python3 python3-venv python3-pip curl wget xxd figlet make build-essential libssl-dev zlib1g-dev
 
-# ============================================
-# Clone or update the project
-# ============================================
 if [ ! -d "$APP_DIR/.git" ]; then
   rm -rf "$APP_DIR"
   git clone --depth 1 "$REPO_URL" "$APP_DIR" || {
@@ -44,25 +38,21 @@ fi
 
 cd "$APP_DIR"
 
-# ============================================
-# Create virtual environment
-# ============================================
 echo -e "${BLUE}🐍 Creating virtual environment...${NC}"
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# ============================================
-# Install management script
-# ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
 cp -f mtpulse.py /usr/local/bin/mtpulse
 chmod +x /usr/local/bin/mtpulse
 
-# ============================================
-# Create config directory
-# ============================================
+# نصب ماژول تست
+echo -e "${BLUE}📋 Installing test module...${NC}"
+cp -f test_proxy.py /usr/local/bin/test_proxy.py
+chmod +x /usr/local/bin/test_proxy.py
+
 mkdir -p /etc/mtpulse
 
 echo ""
@@ -76,11 +66,9 @@ echo -e "${BOLD}${PURPLE}🎮 HOW TO RUN${NC}"
 echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
 echo -e "  ${YELLOW}Just type:${NC} ${BOLD}${WHITE}mtpulse${NC}"
 echo ""
-echo -e "${BOLD}${GREEN}📋 Features:${NC}"
-echo -e "  ${WHITE}•${NC} Add multiple proxies with custom IP/Domain and port"
-echo -e "  ${WHITE}•${NC} Default port: 80"
-echo -e "  ${WHITE}•${NC} Each proxy can have its own sponsor tag"
-echo -e "  ${WHITE}•${NC} Manage each proxy individually"
+echo -e "${BOLD}${GREEN}📋 New Features:${NC}"
+echo -e "  ${WHITE}•${NC} Test Proxy: Check if a proxy works"
+echo -e "  ${WHITE}•${NC} Two test modes: Quick UDP or Full MTProto"
 echo ""
 echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtpulse${NC} to start managing your proxies!${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
