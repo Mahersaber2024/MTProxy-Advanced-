@@ -521,9 +521,9 @@ def set_default_server_menu():
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
     
-    current = get_default_server()
-    if current:
-        print(f"{Colors.YELLOW}Current default server: {Colors.WHITE}{current}{Colors.NC}")
+    current_server = get_default_server()
+    if current_server:
+        print(f"{Colors.YELLOW}Current default server: {Colors.WHITE}{current_server}{Colors.NC}")
     else:
         public_ip = get_public_ip()
         print(f"{Colors.YELLOW}Auto-detected public IP: {Colors.WHITE}{public_ip}{Colors.NC}")
@@ -531,9 +531,10 @@ def set_default_server_menu():
     print(f"{Colors.CYAN}Default port: {Colors.WHITE}{get_default_port()}{Colors.NC}")
     print(f"{Colors.CYAN}Default domain: {Colors.WHITE}{get_default_domain()}{Colors.NC}")
     print("")
-    print(f"{Colors.CYAN}ℹ️  This is used when a proxy doesn't have its own settings.{Colors.NC}")
+    print(f"{Colors.CYAN}ℹ️  Changes will be applied to the running proxy service.{Colors.NC}")
     print("")
     
+    # 1. Server address
     new_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default server IP/domain (leave empty to auto-detect): {Colors.NC}").strip()
     if new_addr:
         set_default_server(new_addr)
@@ -543,17 +544,49 @@ def set_default_server_menu():
         set_default_server(public_ip)
         print(f"{Colors.GREEN}✅ Switched to auto-detected IP: {public_ip}{Colors.NC}")
     
+    # 2. Port
     new_port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (current: {get_default_port()}): {Colors.NC}").strip()
     if new_port:
         set_default_port(new_port)
         print(f"{Colors.GREEN}✅ Default port set to: {new_port}{Colors.NC}")
     
+    # 3. Domain
     new_domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default TLS domain (current: {get_default_domain()}): {Colors.NC}").strip()
     if new_domain:
         set_default_domain(new_domain)
         print(f"{Colors.GREEN}✅ Default domain set to: {new_domain}{Colors.NC}")
     
+    # ========== Apply changes to config.py and restart service ==========
+    if new_port or new_domain:
+        print(f"{Colors.CYAN}🔄 Applying changes to proxy configuration...{Colors.NC}")
+        apply_config_changes()
+    
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+
+def apply_config_changes():
+    """Update config.py with current settings and restart service"""
+    port = get_default_port()
+    domain = get_default_domain()
+    
+    # Update config.py
+    config_py_path = f"{PROXY_DIR}/config.py"
+    if os.path.exists(config_py_path):
+        with open(config_py_path, 'r') as f:
+            content = f.read()
+        
+        # Replace PORT
+        content = re.sub(r'PORT\s*=\s*\d+', f'PORT = {port}', content)
+        # Replace TLS_DOMAIN
+        content = re.sub(r'TLS_DOMAIN\s*=\s*"[^"]*"', f'TLS_DOMAIN = "{domain}"', content)
+        
+        with open(config_py_path, 'w') as f:
+            f.write(content)
+        
+        # Restart service
+        subprocess.run(['sudo', 'systemctl', 'restart', SERVICE_NAME], check=False)
+        print(f"{Colors.GREEN}✅ Proxy restarted with new settings.{Colors.NC}")
+    else:
+        print(f"{Colors.RED}❌ Config file not found at {config_py_path}.{Colors.NC}")
 
 def service_menu():
     while True:
@@ -724,7 +757,7 @@ def main():
             print(f"  {Colors.GREEN}2.{Colors.NC} ⚙️ Service Management")
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
-            print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Set Default Server Settings")
+            print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Edit Default Server Settings")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
