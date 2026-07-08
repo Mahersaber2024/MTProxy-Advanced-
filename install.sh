@@ -15,7 +15,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-echo -e "${BOLD}${CYAN}🚀 Installing MTPulse Proxy Manager...${NC}"
+echo -e "${BOLD}${CYAN}🚀 Installing MTProxy Manager...${NC}"
 echo ""
 
 # ============================================
@@ -51,11 +51,11 @@ echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
 pip3 install --break-system-packages requests python-dotenv
 
 # ============================================
-# Install management script
+# Install management script as 'mtproxy'
 # ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
-cp -f mtpulse.py /usr/local/bin/mtpulse
-chmod +x /usr/local/bin/mtpulse
+cp -f mtproxy.py /usr/local/bin/mtproxy
+chmod +x /usr/local/bin/mtproxy
 
 # ============================================
 # Create config directory
@@ -66,7 +66,7 @@ mkdir -p /etc/mtpulse
 # Run the script to install the proxy automatically
 # ============================================
 echo -e "${BLUE}🔧 Setting up MTProto Proxy...${NC}"
-python3 /usr/local/bin/mtpulse --setup
+python3 /usr/local/bin/mtproxy --setup
 
 echo ""
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
@@ -77,7 +77,7 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo -e "${BOLD}${PURPLE}🎮 HOW TO RUN${NC}"
 echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
-echo -e "  ${YELLOW}Just type:${NC} ${BOLD}${WHITE}mtpulse${NC}"
+echo -e "  ${YELLOW}Just type:${NC} ${BOLD}${WHITE}mtproxy${NC}"
 echo ""
-echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtpulse${NC} to start managing your proxies!{NC}"
+echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtproxy${NC} to start managing your proxies!${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
