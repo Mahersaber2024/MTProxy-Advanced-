@@ -144,17 +144,19 @@ def get_proxy_status():
     return "active" if result.stdout.strip() == "active" else "inactive"
 
 def get_proxy_link(proxy):
-    """Generate correct tg:// link - Fixed for AD_TAG"""
+    """Fixed link generation for AD_TAG support"""
     server = proxy.get('server', '') or get_default_server() or get_public_ip()
     port = proxy.get('port', '') or get_default_port()
-    domain = proxy.get('domain', '') or get_default_domain()
     
     secret = proxy.get('secret')
     tag = proxy.get('tag')
     
-    if tag:  # With AD Tag
-        full_secret = f"ee{secret}"                    # Important fix
-    else:    # Without tag (original behavior)
+    if tag:
+        # When using AD_TAG, many users report better compatibility with just "ee" + secret
+        full_secret = f"ee{secret}"
+    else:
+        # Original behavior without tag (with domain padding)
+        domain = proxy.get('domain', '') or get_default_domain()
         full_secret = f"ee{secret}{domain.encode().hex()}"
     
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
