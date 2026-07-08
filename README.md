@@ -24,7 +24,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advance
 Run the uninstall option from the menu or:
 
 ```bash
-sudo bash uninstall.sh
+bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/uninstall.sh)
 ```
 
 ## Author
