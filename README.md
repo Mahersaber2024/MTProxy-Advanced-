@@ -124,7 +124,7 @@ To remove **MTProxy Manager** and its installed components, use the project’s 
 If your project includes a dedicated uninstall script, run:
 
 ```bash
-sudo bash uninstall.sh
+bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/uninstall.sh)
 ```
 
 If there is no script yet, uninstallation usually requires manual cleanup of the installed files and services.
