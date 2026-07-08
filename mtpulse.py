@@ -156,11 +156,18 @@ def list_proxies(config, show_status=True, show_links=False):
 def create_service_file(proxy_id, proxy):
     ip = proxy.get('ip')
     port = proxy.get('port')
-    secret = proxy.get('secret')
+    secret = proxy.get('secret')  # full secret with ee + key + domain
     tag = proxy.get('tag')
     name = proxy.get('name', proxy_id)
     
-    exec_start = f"{BINARY_PATH} -u nobody -p 8888 -H {port} -S {secret} --aes-pwd {SECRET_FILE} {MULTI_FILE} -M 1"
+    # Extract the 16-byte key (32 hex chars) from the secret
+    # Secret format: ee + 32-char key + domain_hex
+    if secret.startswith('ee') and len(secret) >= 34:
+        key = secret[2:34]  # 32 chars key (without 'ee' and without domain)
+    else:
+        key = secret  # fallback for backward compatibility
+    
+    exec_start = f"{BINARY_PATH} -u nobody -p 8888 -H {port} -S {key} --aes-pwd {SECRET_FILE} {MULTI_FILE} -M 1"
     if tag:
         exec_start += f" -P {tag}"
     
