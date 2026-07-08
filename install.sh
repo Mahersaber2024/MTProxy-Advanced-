@@ -59,18 +59,6 @@ sed -i 's/\r$//' /usr/local/bin/mtproxy
 chmod +x /usr/local/bin/mtproxy
 
 # ============================================
-# Install test script (test_proxy.py)
-# ============================================
-echo -e "${BLUE}📋 Installing test script...${NC}"
-if [ -f test_proxy.py ]; then
-  cp -f test_proxy.py /usr/local/bin/test_proxy.py
-  sed -i 's/\r$//' /usr/local/bin/test_proxy.py
-  chmod +x /usr/local/bin/test_proxy.py
-else
-  echo -e "${YELLOW}⚠️ test_proxy.py not found in repository. Skipping.${NC}"
-fi
-
-# ============================================
 # Create config directory
 # ============================================
 mkdir -p /etc/mtpulse
