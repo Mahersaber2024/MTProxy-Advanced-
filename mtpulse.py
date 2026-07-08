@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -50,6 +50,7 @@ def print_header():
     print(f"{Colors.CYAN}{Colors.BOLD}║       ╚═╝     ╚═╝   ╚═╝   ╚═╝        ╚═╝   ╚══════╝╚══════╝╚══════╝  ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}║                                                                     ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}║              MTProto Proxy Manager  -  v{VERSION} (Python)           ║{Colors.NC}")
+    print(f"{Colors.CYAN}{Colors.BOLD}║                   (Multi-Proxy per IP/Domain)                      ║{Colors.NC}")
     print(f"{Colors.CYAN}{Colors.BOLD}╚═══════════════════════════════════════════════════════════════════════╝{Colors.NC}")
     print("")
     print(f"{Colors.PURPLE}{Colors.BOLD}🌟 Sponsored by: {SPONSOR_NAME}{Colors.NC}")
@@ -59,32 +60,34 @@ def print_header():
     print("")
 
 def load_settings():
-    """Load settings from settings.json"""
     if not os.path.exists(SETTINGS_FILE):
-        return {"server_address": ""}
+        return {"default_server": "", "default_port": "443", "default_domain": "www.google.com"}
     try:
         with open(SETTINGS_FILE, 'r') as f:
             return json.load(f)
     except:
-        return {"server_address": ""}
+        return {"default_server": "", "default_port": "443", "default_domain": "www.google.com"}
 
 def save_settings(settings):
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(settings, f, indent=2)
 
-def get_server_address():
-    """Get manually set server address or fallback to public IP"""
+def get_default_server():
     settings = load_settings()
-    addr = settings.get('server_address', '')
-    if addr:
-        return addr
-    # Fallback to public IP
-    return get_public_ip()
+    return settings.get('default_server', '')
 
-def set_server_address(address):
+def get_default_port():
     settings = load_settings()
-    settings['server_address'] = address.strip()
+    return settings.get('default_port', '443')
+
+def get_default_domain():
+    settings = load_settings()
+    return settings.get('default_domain', 'www.google.com')
+
+def set_default_server(address):
+    settings = load_settings()
+    settings['default_server'] = address.strip()
     save_settings(settings)
 
 def get_public_ip():
@@ -111,8 +114,7 @@ def save_proxies(config):
     with open(PROXIES_FILE, 'w') as f:
         json.dump(config, f, indent=2)
 
-def generate_secret(domain="google.com"):
-    """Generate a 32-char hex secret (for config.py)"""
+def generate_secret():
     key_bytes = subprocess.run(['head', '-c', '16', '/dev/urandom'], capture_output=True).stdout
     return subprocess.run(['xxd', '-ps'], input=key_bytes, capture_output=True).stdout.decode().strip()
 
@@ -123,37 +125,23 @@ def get_proxy_status():
                            capture_output=True, text=True)
     return "active" if result.stdout.strip() == "active" else "inactive"
 
-def get_port():
-    if not os.path.exists(CONFIG_FILE):
-        return "443"
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            content = f.read()
-            match = re.search(r'PORT\s*=\s*(\d+)', content)
-            if match:
-                return match.group(1)
-    except:
-        pass
-    return "443"
-
-def get_domain():
-    if not os.path.exists(CONFIG_FILE):
-        return "www.google.com"
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            content = f.read()
-            match = re.search(r'TLS_DOMAIN\s*=\s*"([^"]+)"', content)
-            if match:
-                return match.group(1)
-    except:
-        pass
-    return "www.google.com"
-
-def get_proxy_link(secret):
-    """Generate tg:// link using manually set server address or public IP"""
-    server = get_server_address()
-    port = get_port()
-    domain = get_domain()
+def get_proxy_link(proxy):
+    """Generate tg:// link using proxy's own server/port or defaults"""
+    server = proxy.get('server', '')
+    if not server:
+        server = get_default_server()
+        if not server:
+            server = get_public_ip()
+    
+    port = proxy.get('port', '')
+    if not port:
+        port = get_default_port()
+    
+    domain = proxy.get('domain', '')
+    if not domain:
+        domain = get_default_domain()
+    
+    secret = proxy.get('secret')
     full_secret = f"ee{secret}{domain.encode().hex()}"
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
@@ -161,10 +149,10 @@ def list_proxies():
     config = load_proxies()
     proxies = config.get('proxies', {})
     if not proxies:
-        print(f"{Colors.YELLOW}⚠️ No users configured.{Colors.NC}")
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
         return [], []
     
-    print(f"{Colors.BLUE}📋 Available Users:{Colors.NC}")
+    print(f"{Colors.BLUE}📋 Available Proxies:{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     
     ids = []
@@ -173,19 +161,22 @@ def list_proxies():
     for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
         ids.append(proxy_id)
         name = proxy.get('name', 'Unnamed')
+        server = proxy.get('server', 'default')
+        port = proxy.get('port', 'default')
         secret = proxy.get('secret', '?')
         tag = proxy.get('tag')
         
         status_text = f"{Colors.GREEN}● Active{Colors.NC}" if status == "active" else f"{Colors.RED}● Inactive{Colors.NC}"
         tag_text = f" 🏷️ {Colors.MAGENTA}{tag}{Colors.NC}" if tag else ""
+        server_text = f"@ {server}:{port}" if server != 'default' else ""
         
         secret_short = secret[:8] + "..." if len(secret) > 8 else secret
-        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | Secret: {secret_short} | {status_text}{tag_text}"
+        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | Secret: {secret_short} | {status_text}{tag_text}"
         labels.append(label)
         print(f"  {label}")
         
         if status == "active":
-            link = get_proxy_link(secret)
+            link = get_proxy_link(proxy)
             print(f"     {Colors.CYAN}🔗 {link}{Colors.NC}")
     
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
@@ -197,13 +188,11 @@ def install_proxy():
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
     
-    # Install dependencies
     print(f"{Colors.CYAN}📦 Installing dependencies...{Colors.NC}")
     subprocess.run(['apt-get', 'update', '-qq'], check=False)
     subprocess.run(['apt-get', 'install', '-y', 'python3', 'python3-pip', 'git', 'curl', 'jq', 'ca-certificates'], check=False)
     subprocess.run(['pip3', 'install', 'cryptography', 'uvloop'], check=False)
     
-    # Clone mtprotoproxy
     if os.path.exists(PROXY_DIR):
         shutil.rmtree(PROXY_DIR)
     
@@ -214,29 +203,27 @@ def install_proxy():
         print(f"{Colors.RED}❌ Failed to clone repository.{Colors.NC}")
         return False
     
-    # Get config
-    port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter port (default 443): {Colors.NC}").strip()
+    # Get default config
+    port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (default 443): {Colors.NC}").strip()
     if not port:
         port = "443"
+    set_default_port(port)
     
-    domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter TLS domain (default www.google.com): {Colors.NC}").strip()
+    domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default TLS domain (default www.google.com): {Colors.NC}").strip()
     if not domain:
         domain = "www.google.com"
+    set_default_domain(domain)
     
-    # Get server address
-    print("")
-    print(f"{Colors.CYAN}ℹ️  Enter the IP or domain that clients will use to connect.{Colors.NC}")
-    print(f"{Colors.CYAN}   (Leave empty to auto-detect public IP){Colors.NC}")
-    server_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP or domain: {Colors.NC}").strip()
+    server_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default server IP/domain (leave empty for auto-detect): {Colors.NC}").strip()
     if server_addr:
-        set_server_address(server_addr)
-        print(f"{Colors.GREEN}✅ Server address set to: {server_addr}{Colors.NC}")
+        set_default_server(server_addr)
+        print(f"{Colors.GREEN}✅ Default server set to: {server_addr}{Colors.NC}")
     else:
         public_ip = get_public_ip()
-        set_server_address(public_ip)
+        set_default_server(public_ip)
         print(f"{Colors.GREEN}✅ Auto-detected public IP: {public_ip}{Colors.NC}")
     
-    # Create initial config
+    # Create config
     config_py = f"""PORT = {port}
 USERS = {{}}
 TLS_DOMAIN = "{domain}"
@@ -272,7 +259,7 @@ WantedBy=multi-user.target
 
 def add_proxy():
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}➕ Add New User{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.GREEN}➕ Add New Proxy{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
     
@@ -284,19 +271,40 @@ def add_proxy():
     config = load_proxies()
     proxies = config.get('proxies', {})
     
-    name = input(f"{Colors.BOLD}{Colors.PURPLE}Enter username: {Colors.NC}").strip()
+    name = input(f"{Colors.BOLD}{Colors.PURPLE}Enter proxy name (e.g. US, EU, Main): {Colors.NC}").strip()
     if not name:
-        name = f"User-{len(proxies)+1}"
+        name = f"Proxy-{len(proxies)+1}"
+    
+    # Server address (optional)
+    print("")
+    print(f"{Colors.CYAN}ℹ️  Leave empty to use default server address{Colors.NC}")
+    server = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP/domain for this proxy: {Colors.NC}").strip()
+    
+    # Port (optional)
+    if server:
+        port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter port for this proxy (default: {get_default_port()}): {Colors.NC}").strip()
+        if not port:
+            port = ""
+    else:
+        port = ""
+    
+    # Domain (optional)
+    domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter TLS domain for this proxy (default: {get_default_domain()}): {Colors.NC}").strip()
+    if not domain:
+        domain = ""
     
     secret = generate_secret()
     print(f"{Colors.CYAN}Generated Secret: {Colors.WHITE}{secret}{Colors.NC}")
     
     tag = input(f"{Colors.BOLD}{Colors.PURPLE}Enter AD Tag (optional, press Enter to skip): {Colors.NC}").strip()
     
-    proxy_id = f"u{str(len(proxies)+1)}"
+    proxy_id = f"p{str(len(proxies)+1)}"
     proxy = {
         "name": name,
         "secret": secret,
+        "server": server,
+        "port": port,
+        "domain": domain,
         "tag": tag if tag else None
     }
     proxies[proxy_id] = proxy
@@ -329,13 +337,15 @@ def add_proxy():
     
     subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
     
-    link = get_proxy_link(secret)
+    link = get_proxy_link(proxy)
     
     print("")
     print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
-    print(f"{Colors.GREEN}{Colors.BOLD}     🚀 User Added Successfully!{Colors.NC}")
+    print(f"{Colors.GREEN}{Colors.BOLD}     🚀 Proxy Added Successfully!{Colors.NC}")
     print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
     print(f"Name:   {Colors.WHITE}{name}{Colors.NC}")
+    print(f"Server: {Colors.WHITE}{server if server else '(default)'}{Colors.NC}")
+    print(f"Port:   {Colors.WHITE}{port if port else '(default)'}{Colors.NC}")
     print(f"Secret: {Colors.WHITE}{secret}{Colors.NC}")
     if tag:
         print(f"Tag:    {Colors.WHITE}{tag}{Colors.NC}")
@@ -347,20 +357,20 @@ def add_proxy():
 
 def remove_proxy():
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.RED}➖ Remove User{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.RED}➖ Remove Proxy{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     
     config = load_proxies()
     proxies = config.get('proxies', {})
     
     if not proxies:
-        print(f"{Colors.YELLOW}⚠️ No users configured.{Colors.NC}")
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
     ids, labels = list_proxies()
     print("")
-    print(f"{Colors.RED}⚠️ Select a user to REMOVE:{Colors.NC}")
+    print(f"{Colors.RED}⚠️ Select a proxy to REMOVE:{Colors.NC}")
     
     try:
         choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Enter number (1-{len(ids)}): {Colors.NC}").strip())
@@ -398,12 +408,12 @@ def remove_proxy():
     
     subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
     
-    print(f"{Colors.GREEN}✅ User '{name}' removed successfully!{Colors.NC}")
+    print(f"{Colors.GREEN}✅ Proxy '{name}' removed successfully!{Colors.NC}")
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
 def tag_proxy():
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}📝 Add Tag to User{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.GREEN}📝 Add Tag to Proxy{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print(f"{Colors.YELLOW}ℹ️  Get AD Tag from @MTProxybot on Telegram{Colors.NC}")
     print("")
@@ -412,7 +422,7 @@ def tag_proxy():
     proxies = config.get('proxies', {})
     
     if not proxies:
-        print(f"{Colors.YELLOW}⚠️ No users configured.{Colors.NC}")
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
@@ -420,7 +430,7 @@ def tag_proxy():
     print("")
     
     try:
-        choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select user (1-{len(ids)}): {Colors.NC}").strip())
+        choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select proxy (1-{len(ids)}): {Colors.NC}").strip())
         if choice < 1 or choice > len(ids):
             print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
             input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
@@ -463,39 +473,53 @@ def tag_proxy():
         print(f"{Colors.GREEN}✅ Tag removed.{Colors.NC}")
     
     proxies[proxy_id] = proxy
-    config['proxies'] = proxies
-    save_proxies(config)
+    save_proxies(load_proxies())
     
     subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
-def set_server_address_menu():
+def set_default_server_menu():
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}🌐 Set Server Address{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.GREEN}🌐 Set Default Server Address{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
     
-    current = load_settings().get('server_address', '')
+    current = get_default_server()
     if current:
-        print(f"{Colors.YELLOW}Current address: {Colors.WHITE}{current}{Colors.NC}")
+        print(f"{Colors.YELLOW}Current default: {Colors.WHITE}{current}{Colors.NC}")
     else:
         public_ip = get_public_ip()
         print(f"{Colors.YELLOW}Auto-detected public IP: {Colors.WHITE}{public_ip}{Colors.NC}")
-        print(f"{Colors.YELLOW}No custom address set (using auto-detected IP){Colors.NC}")
     
+    print(f"{Colors.CYAN}Default port: {Colors.WHITE}{get_default_port()}{Colors.NC}")
+    print(f"{Colors.CYAN}Default domain: {Colors.WHITE}{get_default_domain()}{Colors.NC}")
     print("")
-    print(f"{Colors.CYAN}ℹ️  Enter the IP or domain that clients will use to connect.{Colors.NC}")
-    print(f"{Colors.CYAN}   Useful when your server has multiple IPs or is behind NAT.{Colors.NC}")
+    print(f"{Colors.CYAN}ℹ️  This is used when a proxy doesn't have its own server/port/domain.{Colors.NC}")
     print("")
-    new_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP or domain (leave empty to auto-detect): {Colors.NC}").strip()
     
+    new_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default server IP/domain (leave empty to auto-detect): {Colors.NC}").strip()
     if new_addr:
-        set_server_address(new_addr)
-        print(f"{Colors.GREEN}✅ Server address set to: {new_addr}{Colors.NC}")
+        set_default_server(new_addr)
+        print(f"{Colors.GREEN}✅ Default server set to: {new_addr}{Colors.NC}")
     else:
         public_ip = get_public_ip()
-        set_server_address(public_ip)
+        set_default_server(public_ip)
         print(f"{Colors.GREEN}✅ Switched to auto-detected IP: {public_ip}{Colors.NC}")
+    
+    # Also allow changing default port/domain
+    new_port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (current: {get_default_port()}): {Colors.NC}").strip()
+    if new_port:
+        settings = load_settings()
+        settings['default_port'] = new_port
+        save_settings(settings)
+        print(f"{Colors.GREEN}✅ Default port set to: {new_port}{Colors.NC}")
+    
+    new_domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default TLS domain (current: {get_default_domain()}): {Colors.NC}").strip()
+    if new_domain:
+        settings = load_settings()
+        settings['default_domain'] = new_domain
+        save_settings(settings)
+        print(f"{Colors.GREEN}✅ Default domain set to: {new_domain}{Colors.NC}")
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
@@ -568,26 +592,22 @@ def main():
     while True:
         print_header()
         
-        # Show status
         status = get_proxy_status()
         config = load_proxies()
         proxy_count = len(config.get('proxies', {}))
-        server_addr = load_settings().get('server_address', '')
+        default_server = get_default_server()
+        default_port = get_default_port()
         
         print(f"{Colors.BLUE}📊 Status:{Colors.NC}")
         if not os.path.exists(PROXY_DIR):
             print(f"  {Colors.YELLOW}●{Colors.NC} Proxy: {Colors.YELLOW}Not installed{Colors.NC}")
         elif status == "active":
             print(f"  {Colors.GREEN}●{Colors.NC} Proxy: {Colors.GREEN}Active{Colors.NC}")
-            port = get_port()
-            domain = get_domain()
-            print(f"  {Colors.BLUE}●{Colors.NC} Port: {Colors.WHITE}{port}{Colors.NC}")
-            print(f"  {Colors.BLUE}●{Colors.NC} Domain: {Colors.WHITE}{domain}{Colors.NC}")
-            print(f"  {Colors.BLUE}●{Colors.NC} Server address: {Colors.WHITE}{server_addr if server_addr else 'auto-detect'}{Colors.NC}")
+            print(f"  {Colors.BLUE}●{Colors.NC} Default: {Colors.WHITE}{default_server if default_server else 'auto-detect'}:{default_port}{Colors.NC}")
         else:
             print(f"  {Colors.RED}●{Colors.NC} Proxy: {Colors.RED}Inactive{Colors.NC}")
         
-        print(f"  {Colors.BLUE}●{Colors.NC} Users: {Colors.WHITE}{proxy_count}{Colors.NC}")
+        print(f"  {Colors.BLUE}●{Colors.NC} Proxies: {Colors.WHITE}{proxy_count}{Colors.NC}")
         
         if proxy_count > 0 and status == "active":
             print("")
@@ -596,11 +616,11 @@ def main():
         print("")
         print(f"{Colors.BLUE}📋 Menu:{Colors.NC}")
         print(f"  {Colors.GREEN}1.{Colors.NC} 📥 Install MTProto Proxy")
-        print(f"  {Colors.GREEN}2.{Colors.NC} ➕ Add User")
+        print(f"  {Colors.GREEN}2.{Colors.NC} ➕ Add Proxy (with custom IP/domain)")
         print(f"  {Colors.GREEN}3.{Colors.NC} ⚙️ Service Management")
-        print(f"  {Colors.GREEN}4.{Colors.NC} 📝 Add Tag to User")
-        print(f"  {Colors.GREEN}5.{Colors.NC} ➖ Remove User")
-        print(f"  {Colors.GREEN}6.{Colors.NC} 🌐 Set Server Address")
+        print(f"  {Colors.GREEN}4.{Colors.NC} 📝 Add Tag to Proxy")
+        print(f"  {Colors.GREEN}5.{Colors.NC} ➖ Remove Proxy")
+        print(f"  {Colors.GREEN}6.{Colors.NC} 🌐 Set Default Server Settings")
         print(f"  {Colors.GREEN}7.{Colors.NC} 🗑️ Uninstall MTPulse")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
@@ -618,7 +638,7 @@ def main():
         elif choice == '5':
             remove_proxy()
         elif choice == '6':
-            set_server_address_menu()
+            set_default_server_menu()
         elif choice == '7':
             uninstall()
         elif choice == '0':
