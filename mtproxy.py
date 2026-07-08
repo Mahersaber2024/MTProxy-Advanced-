@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.3.6"
+VERSION = "3.3.7"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -21,7 +21,6 @@ CONFIG_DIR = "/etc/mtpulse"
 PROXIES_FILE = f"{CONFIG_DIR}/proxies.json"
 SETTINGS_FILE = f"{CONFIG_DIR}/settings.json"
 SERVICE_NAME = "mtprotoproxy"
-TEST_SCRIPT = "/usr/local/bin/test_proxy.py"
 # ===============================
 
 # Colors (ANSI escape codes)
@@ -144,21 +143,22 @@ def get_proxy_status():
     return "active" if result.stdout.strip() == "active" else "inactive"
 
 def get_proxy_link(proxy):
-    """Fixed link generation for AD_TAG support"""
-    server = proxy.get('server', '') or get_default_server() or get_public_ip()
-    port = proxy.get('port', '') or get_default_port()
+    server = proxy.get('server', '')
+    if not server:
+        server = get_default_server()
+        if not server:
+            server = get_public_ip()
+    
+    port = proxy.get('port', '')
+    if not port:
+        port = get_default_port()
+    
+    domain = proxy.get('domain', '')
+    if not domain:
+        domain = get_default_domain()
     
     secret = proxy.get('secret')
-    tag = proxy.get('tag')
-    
-    if tag:
-        # When using AD_TAG, many users report better compatibility with just "ee" + secret
-        full_secret = f"ee{secret}"
-    else:
-        # Original behavior without tag (with domain padding)
-        domain = proxy.get('domain', '') or get_default_domain()
-        full_secret = f"ee{secret}{domain.encode().hex()}"
-    
+    full_secret = f"ee{secret}{domain.encode().hex()}"
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
@@ -230,7 +230,6 @@ def list_proxies_for_tag(config):
         label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | Secret: {Colors.WHITE}{secret}{Colors.NC} | {status_text}{tag_text}"
         labels.append(label)
         print(f"  {label}")
-        # حذف پیام راهنما
     
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     return ids, labels
@@ -461,6 +460,7 @@ def tag_proxy():
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
+    # Show proxies with full secret
     ids, labels = list_proxies_for_tag(config)
     print("")
     
@@ -507,18 +507,14 @@ def tag_proxy():
             f.write(content)
         print(f"{Colors.GREEN}✅ Tag removed.{Colors.NC}")
     
+    # Save changes to proxies.json correctly
     proxies[proxy_id] = proxy
+    config['proxies'] = proxies
     save_proxies(config)
     
     subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
-    
-    # Show correct link after updating tag
-    link = get_proxy_link(proxy)
-    print(f"\n{Colors.CYAN}New Proxy Link:{Colors.NC}")
-    print(f"{Colors.BOLD}{Colors.CYAN}{link}{Colors.NC}")
-    
-    input(f"\n{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-    
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+
 def set_default_server_menu():
     clear_screen()
     print(f"{Colors.BOLD}{Colors.GREEN}🌐 Set Default Server Settings{Colors.NC}")
@@ -636,63 +632,6 @@ def service_menu():
             print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
             time.sleep(1)
 
-def test_proxy_menu():
-    """Test a proxy using the test_proxy.py script"""
-    clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}🔍 Test Proxy{Colors.NC}")
-    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    
-    config = load_proxies()
-    proxies = config.get('proxies', {})
-    
-    if not proxies:
-        print(f"{Colors.YELLOW}⚠️ No proxies configured. Please add a proxy first.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-        return
-    
-    # Check if test script exists
-    if not os.path.exists(TEST_SCRIPT):
-        print(f"{Colors.YELLOW}⚠️ Test script not found at {TEST_SCRIPT}{Colors.NC}")
-        print(f"{Colors.YELLOW}   Please ensure test_proxy.py is installed.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-        return
-    
-    ids, labels = list_proxies(config, show_status=True, show_links=False)
-    print("")
-    print(f"  {Colors.GREEN}0.{Colors.NC} Back")
-    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    
-    try:
-        choice = int(input(f"{Colors.BOLD}{Colors.PURPLE}Select proxy to test (0-{len(ids)}): {Colors.NC}").strip())
-        if choice == 0:
-            return
-        if choice < 1 or choice > len(ids):
-            print(f"{Colors.RED}❌ Invalid selection.{Colors.NC}")
-            time.sleep(1)
-            return
-    except ValueError:
-        print(f"{Colors.RED}❌ Invalid input.{Colors.NC}")
-        time.sleep(1)
-        return
-    
-    proxy_id = ids[choice - 1]
-    
-    print("")
-    print(f"{Colors.CYAN}🔍 Testing proxy with REAL MTProto connection...{Colors.NC}")
-    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    print("")
-    
-    # Run the real test
-    cmd = [sys.executable, TEST_SCRIPT, proxy_id]
-    result = subprocess.run(cmd, capture_output=False)
-    
-    if result.returncode != 0:
-        print(f"{Colors.RED}❌ Test failed.{Colors.NC}")
-    else:
-        print(f"{Colors.GREEN}✅ Test completed.{Colors.NC}")
-    
-    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-
 def uninstall():
     clear_screen()
     print(f"{Colors.RED}⚠️ Are you sure you want to uninstall MTProxy? (y/N){Colors.NC}")
@@ -710,7 +649,6 @@ def uninstall():
     subprocess.run(['rm', '-rf', PROXY_DIR], check=False)
     subprocess.run(['rm', '-rf', CONFIG_DIR], check=False)
     subprocess.run(['rm', '-f', '/usr/local/bin/mtproxy'], check=False)
-    subprocess.run(['rm', '-f', TEST_SCRIPT], check=False)
     
     print(f"{Colors.GREEN}✅ Uninstallation completed!{Colors.NC}")
     time.sleep(1)
