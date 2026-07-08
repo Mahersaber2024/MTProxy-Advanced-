@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 # ========== Settings ==========
-VERSION = "3.2.1"
+VERSION = "3.3.0"
 SPONSOR_NAME = "HeySolo"
 SPONSOR_LINK = "https://t.me/HeySoloATM"
 CONTACT = "@jadetunnel"
@@ -126,7 +126,6 @@ def get_proxy_status():
     return "active" if result.stdout.strip() == "active" else "inactive"
 
 def get_proxy_link(proxy):
-    """Generate tg:// link using proxy's own server/port or defaults"""
     server = proxy.get('server', '')
     if not server:
         server = get_default_server()
@@ -182,28 +181,31 @@ def list_proxies():
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     return ids, labels
 
-def install_proxy():
-    clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}📥 Install MTProto Proxy (Python){Colors.NC}")
-    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    print("")
+def install_mtproto_proxy():
+    """Install mtprotoproxy automatically"""
+    print(f"{Colors.CYAN}📦 Installing MTProto Proxy...{Colors.NC}")
     
-    print(f"{Colors.CYAN}📦 Installing dependencies...{Colors.NC}")
+    # Install system dependencies (without pip packages here)
     subprocess.run(['apt-get', 'update', '-qq'], check=False)
     subprocess.run(['apt-get', 'install', '-y', 'python3', 'python3-pip', 'git', 'curl', 'jq', 'ca-certificates'], check=False)
-    subprocess.run(['pip3', 'install', 'cryptography', 'uvloop'], check=False)
     
+    # Remove old directory if exists
     if os.path.exists(PROXY_DIR):
         shutil.rmtree(PROXY_DIR)
     
-    print(f"{Colors.CYAN}📥 Cloning mtprotoproxy...{Colors.NC}")
-    clone = subprocess.run(['git', 'clone', 'https://github.com/alexbers/mtprotoproxy.git', PROXY_DIR],
+    # Clone mtprotoproxy
+    clone = subprocess.run(['git', 'clone', '--depth=1', 'https://github.com/alexbers/mtprotoproxy.git', PROXY_DIR],
                           capture_output=True, text=True)
     if clone.returncode != 0:
         print(f"{Colors.RED}❌ Failed to clone repository.{Colors.NC}")
         return False
     
-    # Get default config
+    # Install Python packages with --break-system-packages
+    print(f"{Colors.CYAN}📦 Installing Python packages...{Colors.NC}")
+    subprocess.run(['pip3', 'install', '--break-system-packages', 'cryptography', 'uvloop'], check=False)
+    
+    # Ask for default config
+    print("")
     port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (default 443): {Colors.NC}").strip()
     if not port:
         port = "443"
@@ -217,13 +219,12 @@ def install_proxy():
     server_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default server IP/domain (leave empty for auto-detect): {Colors.NC}").strip()
     if server_addr:
         set_default_server(server_addr)
-        print(f"{Colors.GREEN}✅ Default server set to: {server_addr}{Colors.NC}")
     else:
         public_ip = get_public_ip()
         set_default_server(public_ip)
         print(f"{Colors.GREEN}✅ Auto-detected public IP: {public_ip}{Colors.NC}")
     
-    # Create config
+    # Create initial config.py
     config_py = f"""PORT = {port}
 USERS = {{}}
 TLS_DOMAIN = "{domain}"
@@ -264,7 +265,8 @@ def add_proxy():
     print("")
     
     if not os.path.exists(PROXY_DIR):
-        print(f"{Colors.RED}❌ MTProto Proxy not installed. Please install first (option 1).{Colors.NC}")
+        print(f"{Colors.RED}❌ MTProto Proxy not installed.{Colors.NC}")
+        print(f"{Colors.YELLOW}💡 Please run the setup first: mtpulse --setup{Colors.NC}")
         input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
         return
     
@@ -275,13 +277,11 @@ def add_proxy():
     if not name:
         name = f"Proxy-{len(proxies)+1}"
     
-    # Server address (optional) - only ask for server, port and domain will use defaults
     print("")
     print(f"{Colors.CYAN}ℹ️  Leave empty to use default server address{Colors.NC}")
     print(f"{Colors.CYAN}   (Default port: {get_default_port()}, Default domain: {get_default_domain()}){Colors.NC}")
     server = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP/domain for this proxy: {Colors.NC}").strip()
     
-    # Port and domain are left empty so defaults will be used
     port = ""
     domain = ""
     
@@ -472,13 +472,13 @@ def tag_proxy():
 
 def set_default_server_menu():
     clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}🌐 Set Default Server Address{Colors.NC}")
+    print(f"{Colors.BOLD}{Colors.GREEN}🌐 Set Default Server Settings{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     print("")
     
     current = get_default_server()
     if current:
-        print(f"{Colors.YELLOW}Current default: {Colors.WHITE}{current}{Colors.NC}")
+        print(f"{Colors.YELLOW}Current default server: {Colors.WHITE}{current}{Colors.NC}")
     else:
         public_ip = get_public_ip()
         print(f"{Colors.YELLOW}Auto-detected public IP: {Colors.WHITE}{public_ip}{Colors.NC}")
@@ -486,7 +486,7 @@ def set_default_server_menu():
     print(f"{Colors.CYAN}Default port: {Colors.WHITE}{get_default_port()}{Colors.NC}")
     print(f"{Colors.CYAN}Default domain: {Colors.WHITE}{get_default_domain()}{Colors.NC}")
     print("")
-    print(f"{Colors.CYAN}ℹ️  This is used when a proxy doesn't have its own server/port/domain.{Colors.NC}")
+    print(f"{Colors.CYAN}ℹ️  This is used when a proxy doesn't have its own settings.{Colors.NC}")
     print("")
     
     new_addr = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default server IP/domain (leave empty to auto-detect): {Colors.NC}").strip()
@@ -498,7 +498,6 @@ def set_default_server_menu():
         set_default_server(public_ip)
         print(f"{Colors.GREEN}✅ Switched to auto-detected IP: {public_ip}{Colors.NC}")
     
-    # Also allow changing default port/domain
     new_port = input(f"{Colors.BOLD}{Colors.PURPLE}Enter default port (current: {get_default_port()}): {Colors.NC}").strip()
     if new_port:
         settings = load_settings()
@@ -580,7 +579,20 @@ def uninstall():
     print(f"{Colors.GREEN}✅ Uninstallation completed!{Colors.NC}")
     time.sleep(1)
 
+def setup():
+    """Setup mode - install proxy and ask for config"""
+    print(f"{Colors.BOLD}{Colors.GREEN}🔧 Setting up MTProto Proxy...{Colors.NC}")
+    print("")
+    install_mtproto_proxy()
+    print("")
+    print(f"{Colors.GREEN}✅ Setup completed! Run 'mtpulse' to manage proxies.{Colors.NC}")
+
 def main():
+    # If --setup argument is passed, run setup mode
+    if len(sys.argv) > 1 and sys.argv[1] == '--setup':
+        setup()
+        sys.exit(0)
+    
     while True:
         print_header()
         
@@ -593,6 +605,7 @@ def main():
         print(f"{Colors.BLUE}📊 Status:{Colors.NC}")
         if not os.path.exists(PROXY_DIR):
             print(f"  {Colors.YELLOW}●{Colors.NC} Proxy: {Colors.YELLOW}Not installed{Colors.NC}")
+            print(f"  {Colors.YELLOW}💡 Run 'mtpulse --setup' to install the proxy{Colors.NC}")
         elif status == "active":
             print(f"  {Colors.GREEN}●{Colors.NC} Proxy: {Colors.GREEN}Active{Colors.NC}")
             print(f"  {Colors.BLUE}●{Colors.NC} Default: {Colors.WHITE}{default_server if default_server else 'auto-detect'}:{default_port}{Colors.NC}")
@@ -607,38 +620,45 @@ def main():
         
         print("")
         print(f"{Colors.BLUE}📋 Menu:{Colors.NC}")
-        print(f"  {Colors.GREEN}1.{Colors.NC} 📥 Install MTProto Proxy")
-        print(f"  {Colors.GREEN}2.{Colors.NC} ➕ Add Proxy (with custom IP/domain)")
-        print(f"  {Colors.GREEN}3.{Colors.NC} ⚙️ Service Management")
-        print(f"  {Colors.GREEN}4.{Colors.NC} 📝 Add Tag to Proxy")
-        print(f"  {Colors.GREEN}5.{Colors.NC} ➖ Remove Proxy")
-        print(f"  {Colors.GREEN}6.{Colors.NC} 🌐 Set Default Server Settings")
-        print(f"  {Colors.GREEN}7.{Colors.NC} 🗑️ Uninstall MTPulse")
+        if not os.path.exists(PROXY_DIR):
+            print(f"  {Colors.GREEN}1.{Colors.NC} 🔧 Setup Proxy (install and configure)")
+        else:
+            print(f"  {Colors.GREEN}1.{Colors.NC} ➕ Add Proxy (with custom IP/domain)")
+            print(f"  {Colors.GREEN}2.{Colors.NC} ⚙️ Service Management")
+            print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
+            print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
+            print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Set Default Server Settings")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
         choice = input(f"{Colors.BOLD}{Colors.PURPLE}Select an option: {Colors.NC}").strip()
         
-        if choice == '1':
-            install_proxy()
-        elif choice == '2':
-            add_proxy()
-        elif choice == '3':
-            service_menu()
-        elif choice == '4':
-            tag_proxy()
-        elif choice == '5':
-            remove_proxy()
-        elif choice == '6':
-            set_default_server_menu()
-        elif choice == '7':
-            uninstall()
-        elif choice == '0':
-            print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
-            sys.exit(0)
+        if not os.path.exists(PROXY_DIR):
+            if choice == '1':
+                setup()
+            elif choice == '0':
+                print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
+                sys.exit(0)
+            else:
+                print(f"{Colors.RED}❌ Invalid option. Please run setup first.{Colors.NC}")
+                time.sleep(1)
         else:
-            print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
-            time.sleep(1)
+            if choice == '1':
+                add_proxy()
+            elif choice == '2':
+                service_menu()
+            elif choice == '3':
+                tag_proxy()
+            elif choice == '4':
+                remove_proxy()
+            elif choice == '5':
+                set_default_server_menu()
+            elif choice == '0':
+                print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
+                sys.exit(0)
+            else:
+                print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
+                time.sleep(1)
 
 if __name__ == "__main__":
     try:
