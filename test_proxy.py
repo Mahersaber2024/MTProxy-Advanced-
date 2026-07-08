@@ -280,43 +280,76 @@ def test_proxy(proxy_id, proxy_data):
     return test_proxy_with_pyrogram(python_path, proxy_data, api_id, api_hash)
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 test_proxy.py <proxy_id>")
-        print("  or:  python3 test_proxy.py --list")
-        sys.exit(1)
-    
-    if sys.argv[1] == '--list':
-        config = load_config()
-        proxies = config.get('proxies', {})
-        print("Available proxies:")
-        for pid, p in proxies.items():
-            print(f"  {pid}: {p.get('name')} ({p.get('server')}:{p.get('port')})")
+    if len(sys.argv) > 1 and sys.argv[1] == '--setup':
+        setup()
         sys.exit(0)
     
-    proxy_id = sys.argv[1]
-    config = load_config()
-    proxies = config.get('proxies', {})
-    
-    if proxy_id not in proxies:
-        print(f"{Colors.RED}❌ Proxy '{proxy_id}' not found.{Colors.NC}")
-        print("Available:", list(proxies.keys()))
-        sys.exit(1)
-    
-    proxy_data = proxies[proxy_id]
-    success, message = test_proxy(proxy_id, proxy_data)
-    
-    print("")
-    print(f"{Colors.CYAN}════════════════════════════════════════════════════════════{Colors.NC}")
-    if success:
-        print(f"{Colors.GREEN}{Colors.BOLD}✅ PROXY IS WORKING{Colors.NC}")
-        print(f"Message: {message}")
-    else:
-        print(f"{Colors.RED}{Colors.BOLD}❌ PROXY IS NOT WORKING{Colors.NC}")
-        print(f"Reason: {message}")
-        print(f"{Colors.YELLOW}💡 Try checking firewall, ports, or proxy configuration.{Colors.NC}")
-    print(f"{Colors.CYAN}════════════════════════════════════════════════════════════{Colors.NC}")
-    
-    sys.exit(0 if success else 1)
+    while True:
+        print_header()
+        
+        status = get_proxy_status()
+        config = load_proxies()
+        proxy_count = len(config.get('proxies', {}))
+        default_server = get_default_server()
+        default_port = get_default_port()
+        
+        print(f"{Colors.BLUE}📊 Status:{Colors.NC}")
+        if not os.path.exists(PROXY_DIR):
+            print(f"  {Colors.YELLOW}●{Colors.NC} Proxy: {Colors.YELLOW}Not installed{Colors.NC}")
+            print(f"  {Colors.YELLOW}💡 Run 'mtproxy --setup' to install the proxy{Colors.NC}")
+        elif status == "active":
+            print(f"  {Colors.GREEN}●{Colors.NC} Proxy: {Colors.GREEN}Active{Colors.NC}")
+            print(f"  {Colors.BLUE}●{Colors.NC} Default: {Colors.WHITE}{default_server if default_server else 'auto-detect'}:{default_port}{Colors.NC}")
+        else:
+            print(f"  {Colors.RED}●{Colors.NC} Proxy: {Colors.RED}Inactive{Colors.NC}")
+        
+        print(f"  {Colors.BLUE}●{Colors.NC} Proxies: {Colors.WHITE}{proxy_count}{Colors.NC}")
+        
+        if proxy_count > 0 and status == "active":
+            print("")
+            list_proxies(config, show_status=True, show_links=True)
+        
+        print("")
+        print(f"{Colors.BLUE}📋 Menu:{Colors.NC}")
+        if not os.path.exists(PROXY_DIR):
+            print(f"  {Colors.GREEN}1.{Colors.NC} 🔧 Setup Proxy (install and configure)")
+        else:
+            print(f"  {Colors.GREEN}1.{Colors.NC} ➕ Add Proxy (with custom IP/domain)")
+            print(f"  {Colors.GREEN}2.{Colors.NC} ⚙️ Service Management")
+            print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
+            print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
+            print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Set Default Server Settings")
+        print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
+        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+        
+        choice = input(f"{Colors.BOLD}{Colors.PURPLE}Select an option: {Colors.NC}").strip()
+        
+        if not os.path.exists(PROXY_DIR):
+            if choice == '1':
+                setup()
+            elif choice == '0':
+                print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
+                sys.exit(0)
+            else:
+                print(f"{Colors.RED}❌ Invalid option. Please run setup first.{Colors.NC}")
+                time.sleep(1)
+        else:
+            if choice == '1':
+                add_proxy()
+            elif choice == '2':
+                service_menu()
+            elif choice == '3':
+                tag_proxy()
+            elif choice == '4':
+                remove_proxy()
+            elif choice == '5':
+                set_default_server_menu()
+            elif choice == '0':
+                print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
+                sys.exit(0)
+            else:
+                print(f"{Colors.RED}❌ Invalid option{Colors.NC}")
+                time.sleep(1)
 
 if __name__ == "__main__":
     main()
