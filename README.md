@@ -20,6 +20,11 @@ A simple tool to install, manage, test, and remove MTProto Proxy on Ubuntu/Debia
 bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/install.sh)
 ```
 
+## How to Use
+After installation, simply run:
+```bash
+mtproxy
+```
 ## Uninstall
 Run the uninstall option from the menu or:
 
