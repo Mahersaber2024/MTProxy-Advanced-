@@ -697,40 +697,79 @@ def setup():
     print("")
     print(f"{Colors.GREEN}✅ Setup completed! Run 'mtproxy' to manage proxies.{Colors.NC}")
 
-def update_proxy():
-    """Update the proxy manager to the latest version"""
-    clear_screen()
-    print(f"{Colors.BOLD}{Colors.GREEN}🔄 Update MTProxy Manager{Colors.NC}")
+def list_proxies(config, show_status=True, show_links=False):
+    """Display list of proxies with online/offline user statistics and traffic"""
+    proxies = config.get('proxies', {})
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
+        return [], []
+    
+    print(f"{Colors.BLUE}📋 Available Proxies:{Colors.NC}")
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-    print("")
     
-    print(f"{Colors.YELLOW}This will update the MTProxy Manager to the latest version.{Colors.NC}")
-    print(f"{Colors.YELLOW}Your existing proxies and settings will be preserved.{Colors.NC}")
-    print("")
+    ids = []
+    labels = []
+    status = get_proxy_status()
     
-    confirm = input(f"{Colors.BOLD}{Colors.PURPLE}Continue with update? (y/N): {Colors.NC}").strip().lower()
-    if confirm != 'y':
-        print(f"{Colors.YELLOW}Update cancelled.{Colors.NC}")
-        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
-        return
+    for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
+        ids.append(proxy_id)
+        name = proxy.get('name', 'Unnamed')
+        server = proxy.get('server', '')
+        port = proxy.get('port', '')
+        tag = proxy.get('tag')
+        secret = proxy.get('secret', '')
+        
+        # Get stats
+        if not port:
+            port = get_default_port()
+        if not server:
+            server = get_default_server()
+            if not server:
+                server = get_public_ip()
+        
+        # Get active users for THIS SPECIFIC proxy using its name
+        online = mtproxy_stats.get_active_users_from_logs(name)
+        
+        # Get historical total users (for offline calculation)
+        total_history = mtproxy_stats.get_total_historical_users(name)
+        offline = max(0, total_history - online) if total_history > 0 else 0
+        
+        # Get traffic statistics
+        traffic = mtproxy_stats.get_traffic_stats(name)
+        traffic_display = mtproxy_stats.format_bytes(traffic.get('total_bytes', 0))
+        
+        # Status indicators
+        if status == "active":
+            status_text = f"{Colors.GREEN}● Active{Colors.NC}"
+        else:
+            status_text = f"{Colors.RED}● Inactive{Colors.NC}"
+        
+        # Color coding for online/offline
+        online_color = Colors.GREEN if online > 0 else Colors.YELLOW
+        offline_color = Colors.RED if offline > 0 else Colors.WHITE
+        
+        server_text = f"@ {server}:{port}" if server else ""
+        
+        # Display tag (secret)
+        if tag:
+            tag_display = f"🏷️ {Colors.MAGENTA}{tag}{Colors.NC}"
+        else:
+            tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
+        
+        # Show traffic as well
+        label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
+                f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
+                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC} | "
+                f"{Colors.BLUE}● Traffic: {Colors.WHITE}{traffic_display}{Colors.NC}")
+        labels.append(label)
+        print(f"  {label}")
+        
+        if show_links and status == "active":
+            link = get_proxy_link(proxy)
+            print(f"     {Colors.CYAN}🔗 {link}{Colors.NC}")
     
-    print(f"{Colors.CYAN}🔄 Running update script...{Colors.NC}")
-    
-    # Run the update script
-    result = subprocess.run(
-        ['bash', '-c', 'bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/update.sh)'],
-        capture_output=True,
-        text=True
-    )
-    
-    if result.returncode == 0:
-        print(f"{Colors.GREEN}✅ Update completed successfully!{Colors.NC}")
-        print(f"{Colors.YELLOW}💡 Please restart the program to see changes.{Colors.NC}")
-    else:
-        print(f"{Colors.RED}❌ Update failed!{Colors.NC}")
-        print(f"{Colors.RED}Error: {result.stderr}{Colors.NC}")
-    
-    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    return ids, labels
     
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == '--setup':
