@@ -22,7 +22,6 @@ class Colors:
 def get_active_users_for_proxy(proxy_name):
     """
     Get number of active users for a specific proxy from logs
-    Using the format: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
     """
     try:
         # Get logs from last 10 minutes
@@ -34,18 +33,58 @@ def get_active_users_for_proxy(proxy_name):
         
         logs = result.stdout
         
-        # Pattern for stats line: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
-        pattern = rf'{proxy_name}:\s*(\d+)\s*connects\s*\((\d+)\s*current\)'
+        # Pattern for connection: "User <proxy_name> connected from <ip>"
+        connect_pattern = rf'User {proxy_name} .*connected from (\d+\.\d+\.\d+\.\d+)'
+        disconnect_pattern = rf'User {proxy_name} .*disconnected'
         
-        # Find all matches
-        matches = re.findall(pattern, logs)
+        # Find all connections and disconnections
+        connected_ips = set()
+        disconnected_ips = set()
         
-        if matches:
-            # Get the last match (most recent stats)
-            total_connects, current_users = matches[-1]
-            return int(current_users)
+        # Process logs line by line
+        for line in logs.split('\n'):
+            # Check for connection
+            connect_match = re.search(connect_pattern, line)
+            if connect_match:
+                ip = connect_match.group(1)
+                connected_ips.add(ip)
+                # If IP was previously disconnected, remove from disconnected
+                if ip in disconnected_ips:
+                    disconnected_ips.remove(ip)
+                continue
+            
+            # Check for disconnection
+            if re.search(disconnect_pattern, line):
+                # Try to extract IP from disconnect message
+                ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', line)
+                if ip_match:
+                    ip = ip_match.group(1)
+                    disconnected_ips.add(ip)
         
-        return 0
+        # Active users = connected_ips - disconnected_ips
+        active_ips = connected_ips - disconnected_ips
+        
+        # Alternative: count unique users who connected in last 5 minutes
+        # and haven't disconnected
+        try:
+            detail_result = subprocess.run(
+                ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '5 minutes ago'],
+                capture_output=True,
+                text=True
+            )
+            detail_logs = detail_result.stdout
+            
+            all_connects = re.findall(rf'User {proxy_name} .*connected', detail_logs)
+            all_disconnects = re.findall(rf'User {proxy_name} .*disconnected', detail_logs)
+            
+            active_estimate = max(0, len(all_connects) - len(all_disconnects))
+            
+            if len(all_connects) > 0:
+                return max(len(active_ips), active_estimate)
+        except:
+            pass
+        
+        return len(active_ips)
         
     except Exception as e:
         return 0
@@ -71,24 +110,24 @@ def get_total_historical_users(proxy_name):
             capture_output=True,
             text=True
         )
-        logs = result.stdout
+        pattern = rf'User {proxy_name} .*connected from'
+        connections = re.findall(pattern, result.stdout, re.IGNORECASE)
         
-        # Find the latest stats for this proxy
-        pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
-        matches = re.findall(pattern, logs)
+        # Try to extract unique IPs
+        unique_ips = set()
+        for conn in connections:
+            ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', conn)
+            if ip_match:
+                unique_ips.add(ip_match.group(1))
         
-        if matches:
-            # Return the latest total connects
-            return int(matches[-1])
-        
-        return 0
+        return len(unique_ips) if unique_ips else len(connections)
     except:
         return 0
 
 def get_traffic_stats(proxy_name):
     """
     Get traffic statistics for a specific proxy
-    From format: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
+    Returns: (total_bytes, total_connections)
     """
     try:
         # Get traffic logs from last 24 hours
@@ -100,30 +139,25 @@ def get_traffic_stats(proxy_name):
         
         logs = result.stdout
         
-        # Pattern for stats line
-        pattern = rf'{proxy_name}:\s*\d+\s*connects\s*\(\d+\s*current\),\s*([\d.]+)\s*([MG]B)'
+        # Look for traffic lines
+        traffic_pattern = rf'User {proxy_name} .*sent (\d+) bytes, received (\d+) bytes'
+        total_sent = 0
+        total_received = 0
         
-        total_mb = 0.0
-        for match in re.finditer(pattern, logs):
-            value = float(match.group(1))
-            unit = match.group(2)
-            if unit == 'GB':
-                total_mb += value * 1024
-            else:  # MB
-                total_mb += value
-        
-        # Convert MB to bytes
-        total_bytes = int(total_mb * 1024 * 1024)
+        for match in re.finditer(traffic_pattern, logs, re.IGNORECASE):
+            sent = int(match.group(1))
+            received = int(match.group(2))
+            total_sent += sent
+            total_received += received
         
         # Count total connections
-        connect_pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
-        connect_matches = re.findall(connect_pattern, logs)
-        total_connections = int(connect_matches[-1]) if connect_matches else 0
+        connect_pattern = rf'User {proxy_name} .*connected'
+        total_connections = len(re.findall(connect_pattern, logs, re.IGNORECASE))
         
         return {
-            'total_sent': total_bytes // 2,  # Approximate
-            'total_received': total_bytes // 2,  # Approximate
-            'total_bytes': total_bytes,
+            'total_sent': total_sent,
+            'total_received': total_received,
+            'total_bytes': total_sent + total_received,
             'total_connections': total_connections
         }
     except Exception as e:
@@ -164,50 +198,3 @@ def get_connection_count(port):
         
     except Exception as e:
         return 0
-
-def view_live_logs():
-    """
-    View live logs with color highlighting
-    """
-    try:
-        print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
-        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-        print(f"{Colors.YELLOW}ℹ️  Showing real-time logs with proxy statistics highlighted{Colors.NC}")
-        print("")
-        
-        # Run journalctl with follow mode
-        process = subprocess.Popen(
-            ['journalctl', '-u', 'mtprotoproxy', '-f', '--no-pager', '-o', 'cat'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
-        )
-        
-        try:
-            for line in process.stdout:
-                # Colorize proxy stats lines
-                if 'connects' in line and 'current' in line:
-                    # This is a stats line - highlight it
-                    parts = line.split(':')
-                    if len(parts) >= 2:
-                        proxy_name = parts[0].strip()
-                        stats = parts[1].strip()
-                        print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
-                    else:
-                        print(f"{Colors.CYAN}{line}{Colors.NC}")
-                elif 'New IPs' in line:
-                    print(f"{Colors.YELLOW}🆕 {line}{Colors.NC}")
-                elif 'Error' in line or 'error' in line:
-                    print(f"{Colors.RED}❌ {line}{Colors.NC}")
-                else:
-                    print(line)
-                    
-        except KeyboardInterrupt:
-            process.terminate()
-            print(f"\n{Colors.GREEN}✅ Log viewer stopped.{Colors.NC}")
-            
-    except Exception as e:
-        print(f"{Colors.RED}❌ Error viewing logs: {e}{Colors.NC}")
-    
-    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
