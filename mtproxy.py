@@ -12,7 +12,7 @@ from pathlib import Path
 import mtproxy_stats
 
 # ========== Settings ==========
-VERSION = "3.4.2"
+VERSION = "3.4.1"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -163,7 +163,7 @@ def get_proxy_link(proxy):
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
-    """Display list of proxies with online/offline user statistics and traffic"""
+    """Display list of proxies with online/offline user statistics"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -191,16 +191,12 @@ def list_proxies(config, show_status=True, show_links=False):
             if not server:
                 server = get_public_ip()
         
-        # Get active users for THIS SPECIFIC proxy using its name
-        online = mtproxy_stats.get_active_users_for_proxy(name)
+        # Get active connections (online users)
+        online = mtproxy_stats.get_active_users_from_process(port)
         
         # Get historical total users (for offline calculation)
         total_history = mtproxy_stats.get_total_historical_users(name)
         offline = max(0, total_history - online) if total_history > 0 else 0
-        
-        # Get traffic statistics
-        traffic = mtproxy_stats.get_traffic_stats(name)
-        traffic_display = mtproxy_stats.format_bytes(traffic.get('total_bytes', 0))
         
         # Status indicators
         if status == "active":
@@ -214,17 +210,15 @@ def list_proxies(config, show_status=True, show_links=False):
         
         server_text = f"@ {server}:{port}" if server else ""
         
-        # Display tag
+        # Display tag (secret) as requested in your example
         if tag:
             tag_display = f"🏷️ {Colors.MAGENTA}{tag}{Colors.NC}"
         else:
             tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
         
-        # Show all stats
         label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
                 f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
-                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC} | "
-                f"{Colors.BLUE}● Usage: {Colors.WHITE}{traffic_display}{Colors.NC}")
+                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC}")
         labels.append(label)
         print(f"  {label}")
         
@@ -636,8 +630,7 @@ def service_menu():
         print(f"  {Colors.GREEN}2.{Colors.NC} Stop")
         print(f"  {Colors.GREEN}3.{Colors.NC} Restart")
         print(f"  {Colors.GREEN}4.{Colors.NC} Status")
-        print(f"  {Colors.GREEN}5.{Colors.NC} View Logs (last 30 lines)")
-        print(f"  {Colors.GREEN}6.{Colors.NC} 📡 Live Log Viewer")  # New option
+        print(f"  {Colors.GREEN}5.{Colors.NC} View Logs")
         print(f"  {Colors.GREEN}0.{Colors.NC} Back")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -661,8 +654,6 @@ def service_menu():
         elif choice == '5':
             subprocess.run(['journalctl', '-u', SERVICE_NAME, '-n', '30', '--no-pager'], check=False)
             input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
-        elif choice == '6':
-            mtproxy_stats.view_live_logs()  # New live log viewer
         elif choice == '0':
             break
         else:
