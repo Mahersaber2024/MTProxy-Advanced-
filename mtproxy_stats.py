@@ -340,3 +340,271 @@ def check_connection_quality(proxy_name):
         return f"🔴 Slow ({per_user:.1f} Mbit/s per user)"
     else:
         return f"🔴 Very Slow ({per_user:.1f} Mbit/s per user)"
+
+def get_active_users_count(proxy_name=None):
+    """
+    Get total number of active users across all proxies or for specific proxy
+    """
+    try:
+        # Get logs from last 10 minutes
+        result = subprocess.run(
+            ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '10 minutes ago'],
+            capture_output=True,
+            text=True
+        )
+        
+        logs = result.stdout
+        
+        if proxy_name:
+            # Get specific proxy users
+            pattern = rf'{proxy_name}:\s*\d+\s*connects\s*\((\d+)\s*current\)'
+            matches = re.findall(pattern, logs)
+            if matches:
+                return int(matches[-1])
+            return 0
+        else:
+            # Get total users across all proxies
+            total_users = 0
+            pattern = r'(\w+):\s*\d+\s*connects\s*\((\d+)\s*current\)'
+            matches = re.findall(pattern, logs)
+            for proxy_name, users in matches:
+                total_users += int(users)
+            return total_users
+            
+    except Exception as e:
+        return 0
+
+def get_total_bandwidth_dynamic():
+    """
+    Get dynamic total bandwidth available on the server
+    """
+    try:
+        # Method 1: Get from /proc/net/dev for actual current bandwidth
+        result = subprocess.run(
+            ['cat', '/proc/net/dev'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if 'eth0' in line or 'ens' in line or 'enp' in line:
+                    parts = line.split()
+                    if len(parts) >= 10:
+                        rx_bytes = int(parts[1])
+                        tx_bytes = int(parts[9])
+                        total_bps = (rx_bytes + tx_bytes) / 1024  # KB/s
+                        total_mbps = total_bps / 1024  # Convert to Mbps
+                        return total_mbps
+        
+        # Method 2: Use speedtest-cli if available
+        result = subprocess.run(
+            ['speedtest-cli', '--simple', '--no-upload'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if 'Download' in line:
+                    speed_match = re.search(r'([\d.]+)\s*Mbit/s', line)
+                    if speed_match:
+                        return float(speed_match.group(1))
+        
+        # Method 3: Use vnstat
+        result = subprocess.run(
+            ['vnstat', '--json', '--oneline'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                if 'interfaces' in data and data['interfaces']:
+                    for iface in data['interfaces']:
+                        if 'traffic' in iface and 'total' in iface['traffic']:
+                            total_rx = iface['traffic']['total'].get('rx', 0)
+                            total_tx = iface['traffic']['total'].get('tx', 0)
+                            total_bps = (total_rx + total_tx) / 1024
+                            return total_bps / 1024
+            except:
+                pass
+        
+        # Method 4: Default fallback - detect from system
+        return 100.0  # Default 100 Mbps if nothing works
+        
+    except Exception as e:
+        return 100.0
+
+def calculate_fair_bandwidth_distribution():
+    """
+    Calculate fair bandwidth distribution among all active users
+    Returns dictionary with detailed distribution
+    """
+    try:
+        # Get total active users
+        total_users = get_active_users_count()
+        
+        if total_users == 0:
+            return {
+                'total_users': 0,
+                'total_bandwidth': 0,
+                'bandwidth_per_user': 0,
+                'distribution': [],
+                'status': 'No active users'
+            }
+        
+        # Get total bandwidth
+        total_bandwidth = get_total_bandwidth_dynamic()
+        
+        # Calculate per user bandwidth
+        per_user = total_bandwidth / total_users
+        
+        # Get all proxies and their users
+        result = subprocess.run(
+            ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '10 minutes ago'],
+            capture_output=True,
+            text=True
+        )
+        
+        logs = result.stdout
+        pattern = r'(\w+):\s*\d+\s*connects\s*\((\d+)\s*current\)'
+        matches = re.findall(pattern, logs)
+        
+        distribution = []
+        for proxy_name, users in matches:
+            user_count = int(users)
+            if user_count > 0:
+                distribution.append({
+                    'proxy': proxy_name,
+                    'users': user_count,
+                    'bandwidth': per_user * user_count,
+                    'per_user': per_user
+                })
+        
+        return {
+            'total_users': total_users,
+            'total_bandwidth': total_bandwidth,
+            'bandwidth_per_user': per_user,
+            'distribution': distribution,
+            'status': 'Active',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+    except Exception as e:
+        return {
+            'total_users': 0,
+            'total_bandwidth': 0,
+            'bandwidth_per_user': 0,
+            'distribution': [],
+            'status': f'Error: {str(e)}'
+        }
+
+def get_proxy_specific_distribution(proxy_name):
+    """
+    Get bandwidth distribution for a specific proxy
+    """
+    try:
+        # Get users for this proxy
+        users = get_active_users_count(proxy_name)
+        
+        if users == 0:
+            return {
+                'proxy': proxy_name,
+                'users': 0,
+                'bandwidth': 0,
+                'per_user': 0,
+                'status': 'No active users'
+            }
+        
+        # Get total bandwidth
+        total_bandwidth = get_total_bandwidth_dynamic()
+        
+        # Get all active users to calculate fair share
+        all_users = get_active_users_count()
+        
+        if all_users > 0:
+            per_user = total_bandwidth / all_users
+        else:
+            per_user = 0
+        
+        return {
+            'proxy': proxy_name,
+            'users': users,
+            'bandwidth': per_user * users,
+            'per_user': per_user,
+            'total_bandwidth': total_bandwidth,
+            'status': 'Active',
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+    except Exception as e:
+        return {
+            'proxy': proxy_name,
+            'users': 0,
+            'bandwidth': 0,
+            'per_user': 0,
+            'status': f'Error: {str(e)}'
+        }
+
+def display_bandwidth_distribution():
+    """
+    Display bandwidth distribution in a formatted table
+    """
+    data = calculate_fair_bandwidth_distribution()
+    
+    if data['status'] == 'No active users':
+        print(f"{Colors.YELLOW}💤 No active users - Bandwidth is idle{Colors.NC}")
+        return
+    
+    print(f"{Colors.BOLD}{Colors.GREEN}📊 Bandwidth Distribution Report{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    print(f"{Colors.WHITE}📅 Time: {data['timestamp']}{Colors.NC}")
+    print(f"{Colors.WHITE}👥 Total Active Users: {Colors.GREEN}{data['total_users']}{Colors.NC}")
+    print(f"{Colors.WHITE}📶 Total Bandwidth: {Colors.GREEN}{data['total_bandwidth']:.2f} Mbit/s{Colors.NC}")
+    print(f"{Colors.WHITE}⚡ Bandwidth Per User: {Colors.GREEN}{data['bandwidth_per_user']:.2f} Mbit/s{Colors.NC}")
+    print("")
+    
+    if data['distribution']:
+        print(f"{Colors.BOLD}Per Proxy Distribution:{Colors.NC}")
+        for dist in data['distribution']:
+            users = dist['users']
+            bw = dist['bandwidth']
+            per_user = dist['per_user']
+            print(f"  {Colors.BLUE}📡 {dist['proxy']}{Colors.NC}: {users} users | "
+                  f"Total: {bw:.2f} Mbit/s | Per User: {per_user:.2f} Mbit/s")
+    
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+
+def get_network_stats():
+    """
+    Get current network statistics
+    """
+    try:
+        # Get interface stats
+        result = subprocess.run(
+            ['cat', '/proc/net/dev'],
+            capture_output=True,
+            text=True
+        )
+        
+        stats = {}
+        if result.returncode == 0:
+            lines = result.stdout.split('\n')
+            for line in lines:
+                if 'eth0' in line or 'ens' in line or 'enp' in line:
+                    parts = line.split()
+                    if len(parts) >= 17:
+                        interface = parts[0].strip(':')
+                        stats[interface] = {
+                            'rx_bytes': int(parts[1]),
+                            'rx_packets': int(parts[2]),
+                            'tx_bytes': int(parts[9]),
+                            'tx_packets': int(parts[10])
+                        }
+        
+        return stats
+    except Exception as e:
+        return {}
