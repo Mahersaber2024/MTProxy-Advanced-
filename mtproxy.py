@@ -163,7 +163,7 @@ def get_proxy_link(proxy):
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
-    """Display list of proxies with online/offline user statistics"""
+    """Display list of proxies with online/offline user statistics and traffic"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -191,12 +191,16 @@ def list_proxies(config, show_status=True, show_links=False):
             if not server:
                 server = get_public_ip()
         
-        # Get active connections (online users)
-        online = mtproxy_stats.get_active_users_from_process(port)
+        # Get active users for THIS SPECIFIC proxy using its name
+        online = mtproxy_stats.get_active_users_for_proxy(name)
         
         # Get historical total users (for offline calculation)
         total_history = mtproxy_stats.get_total_historical_users(name)
         offline = max(0, total_history - online) if total_history > 0 else 0
+        
+        # Get traffic statistics
+        traffic = mtproxy_stats.get_traffic_stats(name)
+        traffic_display = mtproxy_stats.format_bytes(traffic.get('total_bytes', 0))
         
         # Status indicators
         if status == "active":
@@ -210,15 +214,17 @@ def list_proxies(config, show_status=True, show_links=False):
         
         server_text = f"@ {server}:{port}" if server else ""
         
-        # Display tag (secret) as requested in your example
+        # Display tag
         if tag:
             tag_display = f"🏷️ {Colors.MAGENTA}{tag}{Colors.NC}"
         else:
             tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
         
+        # Show all stats
         label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
                 f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
-                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC}")
+                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC} | "
+                f"{Colors.BLUE}● Usage: {Colors.WHITE}{traffic_display}{Colors.NC}")
         labels.append(label)
         print(f"  {label}")
         
