@@ -358,8 +358,17 @@ def add_proxy():
     
     server = input(f"{Colors.BOLD}{Colors.PURPLE}Enter server IP/domain for this proxy (leave empty for default): {Colors.NC}").strip()
     
-    port = ""
-    domain = ""
+    # Assign a unique port for this proxy
+    existing_ports = [int(p.get('port', 0)) for p in proxies.values() if p.get('port')]
+    base_port = 4443
+    new_port = base_port
+    while str(new_port) in existing_ports:
+        new_port += 1
+    
+    port = str(new_port)
+    print(f"{Colors.CYAN}📌 Assigned port: {Colors.WHITE}{port}{Colors.NC}")
+    
+    domain = input(f"{Colors.BOLD}{Colors.PURPLE}Enter TLS domain for this proxy (leave empty for default): {Colors.NC}").strip()
     
     secret = generate_secret()
     print(f"{Colors.CYAN}Generated Secret: {Colors.WHITE}{secret}{Colors.NC}")
@@ -379,17 +388,19 @@ def add_proxy():
     config['proxies'] = proxies
     save_proxies(config)
     
+    # Update config.py with new user and port
     with open(f"{PROXY_DIR}/config.py", 'r') as f:
         content = f.read()
     
+    # Add user with port
     users_match = re.search(r'USERS\s*=\s*\{([^}]*)\}', content, re.DOTALL)
     if users_match:
         users_str = users_match.group(1).strip()
         if users_str and not users_str.endswith(','):
             users_str += ','
-        new_users = f'{users_str}"{name}": "{secret}"'
+        new_users = f'{users_str}"{name}": {{"secret": "{secret}", "port": {port}}}'
     else:
-        new_users = f'"{name}": "{secret}"'
+        new_users = f'"{name}": {{"secret": "{secret}", "port": {port}}}'
     
     tag_line = f'\nAD_TAG = "{tag}"' if tag else ''
     
@@ -402,6 +413,7 @@ def add_proxy():
     with open(f"{PROXY_DIR}/config.py", 'w') as f:
         f.write(new_content)
     
+    # Restart service
     subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
     
     link = get_proxy_link(proxy)
@@ -412,7 +424,7 @@ def add_proxy():
     print(f"{Colors.GREEN}{Colors.BOLD}════════════════════════════════════════════════════════════{Colors.NC}")
     print(f"Name:   {Colors.WHITE}{name}{Colors.NC}")
     print(f"Server: {Colors.WHITE}{server if server else '(default)'}{Colors.NC}")
-    print(f"Port:   {Colors.WHITE}{get_default_port()}{Colors.NC} (default)")
+    print(f"Port:   {Colors.WHITE}{port}{Colors.NC}")
     print(f"Secret: {Colors.WHITE}{secret}{Colors.NC}")
     if tag:
         print(f"Tag:    {Colors.WHITE}{tag}{Colors.NC}")
