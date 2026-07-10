@@ -29,11 +29,14 @@ chmod +x "$INSTALL_DIR/mtproxy.py"
 chmod +x "$INSTALL_DIR/mtproxy_stats.py"
 
 # Replace the main executable with the new Python script
+echo "🔄 Updating main executable..."
 if [ -f "$INSTALL_DIR/mtproxy" ]; then
-    echo "🔄 Updating main executable..."
-    cp "$INSTALL_DIR/mtproxy.py" "$INSTALL_DIR/mtproxy"
-    chmod +x "$INSTALL_DIR/mtproxy"
+    # Backup old version
+    cp "$INSTALL_DIR/mtproxy" "$INSTALL_DIR/mtproxy.bak"
 fi
+cp "$INSTALL_DIR/mtproxy.py" "$INSTALL_DIR/mtproxy"
+chmod +x "$INSTALL_DIR/mtproxy"
+
 # Restart service if running
 if systemctl is-active --quiet mtprotoproxy; then
     echo "🔄 Restarting proxy service..."
@@ -44,5 +47,6 @@ echo "✅ Update completed successfully!"
 echo "📊 New features:"
 echo "   • Online/offline user statistics"
 echo "   • Real-time connection monitoring"
+echo "   • Built-in update checker"
 echo ""
 echo "Run 'mtproxy' to see the new features!"
