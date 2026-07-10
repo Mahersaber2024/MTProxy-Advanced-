@@ -34,16 +34,24 @@ def get_active_users_for_proxy(proxy_name):
         
         logs = result.stdout
         
-        # Pattern for stats line: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
-        pattern = rf'{proxy_name}:\s*(\d+)\s*connects\s*\((\d+)\s*current\)'
+        # Improved pattern for stats line
+        # Example: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
+        # This pattern extracts the number inside parentheses
+        pattern = rf'{re.escape(proxy_name)}:\s*\d+\s*connects\s*\((\d+)\s*current\)'
         
-        # Find all matches
         matches = re.findall(pattern, logs)
         
         if matches:
             # Get the last match (most recent stats)
-            total_connects, current_users = matches[-1]
-            return int(current_users)
+            current_users = int(matches[-1])
+            return current_users
+        
+        # Alternative: Try a more flexible pattern
+        pattern2 = rf'{re.escape(proxy_name)}:[^)]*\((\d+)\s*current\)'
+        matches2 = re.findall(pattern2, logs)
+        
+        if matches2:
+            return int(matches2[-1])
         
         return 0
         
@@ -74,7 +82,7 @@ def get_total_historical_users(proxy_name):
         logs = result.stdout
         
         # Find the latest stats for this proxy
-        pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
+        pattern = rf'{re.escape(proxy_name)}:\s*(\d+)\s*connects'
         matches = re.findall(pattern, logs)
         
         if matches:
@@ -100,8 +108,8 @@ def get_traffic_stats(proxy_name):
         
         logs = result.stdout
         
-        # Pattern for stats line
-        pattern = rf'{proxy_name}:\s*\d+\s*connects\s*\(\d+\s*current\),\s*([\d.]+)\s*([MG]B)'
+        # Pattern for stats line - extract traffic
+        pattern = rf'{re.escape(proxy_name)}:\s*\d+\s*connects\s*\(\d+\s*current\),\s*([\d.]+)\s*([MG]B)'
         
         total_mb = 0.0
         for match in re.finditer(pattern, logs):
@@ -116,7 +124,7 @@ def get_traffic_stats(proxy_name):
         total_bytes = int(total_mb * 1024 * 1024)
         
         # Count total connections
-        connect_pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
+        connect_pattern = rf'{re.escape(proxy_name)}:\s*(\d+)\s*connects'
         connect_matches = re.findall(connect_pattern, logs)
         total_connections = int(connect_matches[-1]) if connect_matches else 0
         
@@ -164,78 +172,3 @@ def get_connection_count(port):
         
     except Exception as e:
         return 0
-
-def view_live_logs():
-    """
-    View live logs with color highlighting using tail -f
-    """
-    try:
-        print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
-        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-        print(f"{Colors.YELLOW}ℹ️  Showing real-time logs with proxy statistics highlighted{Colors.NC}")
-        print(f"{Colors.YELLOW}💡 Press Ctrl+C to stop viewing{Colors.NC}")
-        print("")
-        
-        # Use tail -f on the journalctl output
-        # First, get the last 50 lines, then follow
-        cmd = "journalctl -u mtprotoproxy --no-pager -n 50 -o cat && journalctl -u mtprotoproxy -f --no-pager -o cat"
-        
-        process = subprocess.Popen(
-            cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            universal_newlines=True
-        )
-        
-        # Set stdout to non-blocking
-        import fcntl
-        import os
-        fd = process.stdout.fileno()
-        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-        
-        try:
-            while True:
-                try:
-                    line = process.stdout.readline()
-                    if not line:
-                        time.sleep(0.1)
-                        continue
-                    
-                    # Colorize based on content
-                    if 'connects' in line and 'current' in line:
-                        # Stats line - highlight proxy name
-                        parts = line.split(':')
-                        if len(parts) >= 2:
-                            proxy_name = parts[0].strip()
-                            stats = ':'.join(parts[1:]).strip()
-                            print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC}{stats}")
-                        else:
-                            print(f"{Colors.CYAN}{line.strip()}{Colors.NC}")
-                    elif 'New IPs' in line:
-                        print(f"{Colors.YELLOW}🆕 {line.strip()}{Colors.NC}")
-                    elif 'Error' in line or 'error' in line or 'ERROR' in line:
-                        print(f"{Colors.RED}❌ {line.strip()}{Colors.NC}")
-                    elif 'WARNING' in line or 'Warning' in line:
-                        print(f"{Colors.YELLOW}⚠️ {line.strip()}{Colors.NC}")
-                    else:
-                        print(line.strip())
-                        
-                except IOError:
-                    # No data available yet
-                    time.sleep(0.1)
-                    continue
-                    
-        except KeyboardInterrupt:
-            process.terminate()
-            print(f"\n{Colors.GREEN}✅ Log viewer stopped.{Colors.NC}")
-            
-    except Exception as e:
-        print(f"{Colors.RED}❌ Error viewing logs: {e}{Colors.NC}")
-        import traceback
-        traceback.print_exc()
-    
-    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
