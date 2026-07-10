@@ -12,7 +12,7 @@ from pathlib import Path
 import mtproxy_stats
 
 # ========== Settings ==========
-VERSION = "3.4.3"
+VERSION = "3.4.4"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
