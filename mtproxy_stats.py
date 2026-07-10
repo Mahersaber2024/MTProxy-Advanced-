@@ -167,15 +167,23 @@ def get_connection_count(port):
 
 def view_live_logs():
     """
-    View live logs with color highlighting
+    View live logs with real-time updates and color highlighting
+    Using tail -f on the actual log file for better performance
     """
     try:
+        # Find the actual log file or use journalctl with better formatting
         print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         print(f"{Colors.YELLOW}ℹ️  Showing real-time logs with proxy statistics highlighted{Colors.NC}")
+        print(f"{Colors.YELLOW}💡 Logs update every 10 minutes (MTProxy default){Colors.NC}")
         print("")
         
-        # Run journalctl with follow mode
+        # Clear screen and show initial logs
+        os.system('clear' if os.name == 'posix' else 'cls')
+        print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
+        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+        
+        # Run journalctl with follow and output as plain text
         process = subprocess.Popen(
             ['journalctl', '-u', 'mtprotoproxy', '-f', '--no-pager', '-o', 'cat'],
             stdout=subprocess.PIPE,
@@ -186,23 +194,39 @@ def view_live_logs():
         
         try:
             for line in process.stdout:
-                # Colorize proxy stats lines
+                if not line.strip():
+                    continue
+                    
+                # Colorize based on content
                 if 'connects' in line and 'current' in line:
-                    # This is a stats line - highlight it
+                    # Stats line - highlight with green
                     parts = line.split(':')
                     if len(parts) >= 2:
                         proxy_name = parts[0].strip()
-                        stats = parts[1].strip()
-                        print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
+                        stats = ':'.join(parts[1:]).strip()
+                        # Check if there are active users
+                        if '0 current' in line:
+                            print(f"{Colors.YELLOW}[{proxy_name}]{Colors.NC} {stats}")
+                        else:
+                            print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
                     else:
                         print(f"{Colors.CYAN}{line}{Colors.NC}")
                 elif 'New IPs' in line:
-                    print(f"{Colors.YELLOW}🆕 {line}{Colors.NC}")
+                    print(f"{Colors.MAGENTA}🆕 {line}{Colors.NC}")
                 elif 'Error' in line or 'error' in line:
                     print(f"{Colors.RED}❌ {line}{Colors.NC}")
+                elif 'connected' in line.lower():
+                    print(f"{Colors.BLUE}🔗 {line}{Colors.NC}")
+                elif 'disconnected' in line.lower():
+                    print(f"{Colors.RED}🔴 {line}{Colors.NC}")
                 else:
-                    print(line)
-                    
+                    # Check if it's an IP address
+                    ip_match = re.search(r'\b(\d+\.\d+\.\d+\.\d+)\b', line)
+                    if ip_match:
+                        print(f"{Colors.WHITE}📍 {line}{Colors.NC}")
+                    else:
+                        print(line)
+                        
         except KeyboardInterrupt:
             process.terminate()
             print(f"\n{Colors.GREEN}✅ Log viewer stopped.{Colors.NC}")
@@ -211,3 +235,107 @@ def view_live_logs():
         print(f"{Colors.RED}❌ Error viewing logs: {e}{Colors.NC}")
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+
+def get_total_bandwidth():
+    """
+    Get total available bandwidth of the server
+    """
+    try:
+        # Try to get bandwidth from system
+        result = subprocess.run(
+            ['speedtest-cli', '--simple'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if 'Download' in line:
+                    speed = re.search(r'([\d.]+)\s*Mbit/s', line)
+                    if speed:
+                        return float(speed.group(1))
+        
+        # Fallback: use vnstat or iftop
+        result = subprocess.run(
+            ['vnstat', '--oneline'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            # Parse vnstat output
+            parts = result.stdout.split(';')
+            if len(parts) >= 5:
+                # Average download speed in Mbit/s
+                speed = parts[4].strip()
+                if 'Mbit' in speed:
+                    return float(speed.replace('Mbit/s', '').strip())
+        
+        return 100  # Default fallback: 100 Mbit/s
+        
+    except Exception as e:
+        return 100  # Default fallback
+
+def get_per_user_bandwidth(proxy_name):
+    """
+    Calculate bandwidth per user for a specific proxy
+    """
+    try:
+        # Get active users
+        active_users = get_active_users_for_proxy(proxy_name)
+        
+        if active_users == 0:
+            return {
+                'total_bandwidth': 0,
+                'per_user': 0,
+                'active_users': 0,
+                'status': 'No active users'
+            }
+        
+        # Get total bandwidth (default 100 Mbit/s if can't detect)
+        total_bandwidth = get_total_bandwidth()
+        
+        # Calculate per user (divide total bandwidth by active users)
+        per_user = total_bandwidth / active_users
+        
+        # Get traffic stats to show actual usage
+        traffic = get_traffic_stats(proxy_name)
+        
+        return {
+            'total_bandwidth': total_bandwidth,
+            'per_user': per_user,
+            'active_users': active_users,
+            'status': 'Active',
+            'traffic_mb': traffic.get('total_bytes', 0) / (1024 * 1024)
+        }
+        
+    except Exception as e:
+        return {
+            'total_bandwidth': 0,
+            'per_user': 0,
+            'active_users': 0,
+            'status': 'Error'
+        }
+
+def check_connection_quality(proxy_name):
+    """
+    Check connection quality and suggest if proxy is overloaded
+    """
+    stats = get_per_user_bandwidth(proxy_name)
+    
+    if stats['active_users'] == 0:
+        return "🟢 Idle (No users)"
+    
+    per_user = stats['per_user']
+    
+    if per_user >= 10:
+        return f"🟢 Excellent ({per_user:.1f} Mbit/s per user)"
+    elif per_user >= 5:
+        return f"🟡 Good ({per_user:.1f} Mbit/s per user)"
+    elif per_user >= 2:
+        return f"🟠 Fair ({per_user:.1f} Mbit/s per user)"
+    elif per_user >= 1:
+        return f"🔴 Slow ({per_user:.1f} Mbit/s per user)"
+    else:
+        return f"🔴 Very Slow ({per_user:.1f} Mbit/s per user)"
