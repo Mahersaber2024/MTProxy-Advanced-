@@ -19,7 +19,12 @@ A simple tool to install, manage, test, and remove MTProto Proxy on Ubuntu/Debia
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/install.sh)
 ```
+## Update
+Run the update script:
 
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/update.sh)
+```
 ## How to Use
 After installation, simply run:
 ```bash
