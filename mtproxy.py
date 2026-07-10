@@ -9,6 +9,7 @@ import time
 import shutil
 import re
 from pathlib import Path
+import mtproxy_stats
 
 # ========== Settings ==========
 VERSION = "3.3.7"
@@ -162,7 +163,7 @@ def get_proxy_link(proxy):
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
-    """Display list of proxies with status and tag (instead of secret)"""
+    """Display list of proxies with online/offline user statistics"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -174,23 +175,50 @@ def list_proxies(config, show_status=True, show_links=False):
     ids = []
     labels = []
     status = get_proxy_status()
+    
     for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
         ids.append(proxy_id)
         name = proxy.get('name', 'Unnamed')
-        server = proxy.get('server', 'default')
-        port = proxy.get('port', 'default')
+        server = proxy.get('server', '')
+        port = proxy.get('port', '')
         tag = proxy.get('tag')
         
-        status_text = f"{Colors.GREEN}● Active{Colors.NC}" if status == "active" else f"{Colors.RED}● Inactive{Colors.NC}"
-        server_text = f"@ {server}:{port}" if server != 'default' else ""
+        # Get stats
+        if not port:
+            port = get_default_port()
+        if not server:
+            server = get_default_server()
+            if not server:
+                server = get_public_ip()
         
-        # نمایش تگ به جای Secret
+        # Get active connections (online users)
+        online = mtproxy_stats.get_active_users_from_process(port)
+        
+        # Get historical total users (for offline calculation)
+        total_history = mtproxy_stats.get_total_historical_users(name)
+        offline = max(0, total_history - online) if total_history > 0 else 0
+        
+        # Status indicators
+        if status == "active":
+            status_text = f"{Colors.GREEN}● Active{Colors.NC}"
+        else:
+            status_text = f"{Colors.RED}● Inactive{Colors.NC}"
+        
+        # Color coding for online/offline
+        online_color = Colors.GREEN if online > 0 else Colors.YELLOW
+        offline_color = Colors.RED if offline > 0 else Colors.WHITE
+        
+        server_text = f"@ {server}:{port}" if server else ""
+        
+        # Display tag (secret) as requested in your example
         if tag:
             tag_display = f"🏷️ {Colors.MAGENTA}{tag}{Colors.NC}"
         else:
             tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
         
-        label = f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | {status_text}"
+        label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
+                f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
+                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC}")
         labels.append(label)
         print(f"  {label}")
         
