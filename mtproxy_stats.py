@@ -167,23 +167,15 @@ def get_connection_count(port):
 
 def view_live_logs():
     """
-    View live logs with real-time updates and color highlighting
-    Using tail -f on the actual log file for better performance
+    View live logs with color highlighting
     """
     try:
-        # Find the actual log file or use journalctl with better formatting
         print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         print(f"{Colors.YELLOW}ℹ️  Showing real-time logs with proxy statistics highlighted{Colors.NC}")
-        print(f"{Colors.YELLOW}💡 Logs update every 10 minutes (MTProxy default){Colors.NC}")
         print("")
         
-        # Clear screen and show initial logs
-        os.system('clear' if os.name == 'posix' else 'cls')
-        print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
-        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
-        
-        # Run journalctl with follow and output as plain text
+        # Run journalctl with follow mode
         process = subprocess.Popen(
             ['journalctl', '-u', 'mtprotoproxy', '-f', '--no-pager', '-o', 'cat'],
             stdout=subprocess.PIPE,
@@ -194,39 +186,23 @@ def view_live_logs():
         
         try:
             for line in process.stdout:
-                if not line.strip():
-                    continue
-                    
-                # Colorize based on content
+                # Colorize proxy stats lines
                 if 'connects' in line and 'current' in line:
-                    # Stats line - highlight with green
+                    # This is a stats line - highlight it
                     parts = line.split(':')
                     if len(parts) >= 2:
                         proxy_name = parts[0].strip()
-                        stats = ':'.join(parts[1:]).strip()
-                        # Check if there are active users
-                        if '0 current' in line:
-                            print(f"{Colors.YELLOW}[{proxy_name}]{Colors.NC} {stats}")
-                        else:
-                            print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
+                        stats = parts[1].strip()
+                        print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
                     else:
                         print(f"{Colors.CYAN}{line}{Colors.NC}")
                 elif 'New IPs' in line:
-                    print(f"{Colors.MAGENTA}🆕 {line}{Colors.NC}")
+                    print(f"{Colors.YELLOW}🆕 {line}{Colors.NC}")
                 elif 'Error' in line or 'error' in line:
                     print(f"{Colors.RED}❌ {line}{Colors.NC}")
-                elif 'connected' in line.lower():
-                    print(f"{Colors.BLUE}🔗 {line}{Colors.NC}")
-                elif 'disconnected' in line.lower():
-                    print(f"{Colors.RED}🔴 {line}{Colors.NC}")
                 else:
-                    # Check if it's an IP address
-                    ip_match = re.search(r'\b(\d+\.\d+\.\d+\.\d+)\b', line)
-                    if ip_match:
-                        print(f"{Colors.WHITE}📍 {line}{Colors.NC}")
-                    else:
-                        print(line)
-                        
+                    print(line)
+                    
         except KeyboardInterrupt:
             process.terminate()
             print(f"\n{Colors.GREEN}✅ Log viewer stopped.{Colors.NC}")
