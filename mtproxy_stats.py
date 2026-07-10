@@ -340,7 +340,6 @@ def check_connection_quality(proxy_name):
         return f"🔴 Slow ({per_user:.1f} Mbit/s per user)"
     else:
         return f"🔴 Very Slow ({per_user:.1f} Mbit/s per user)"
-
 def get_active_users_count(proxy_name=None):
     """
     Get total number of active users across all proxies or for specific proxy
