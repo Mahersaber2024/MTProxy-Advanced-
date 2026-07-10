@@ -19,10 +19,10 @@ class Colors:
     NC = '\033[0m'
     BOLD = '\033[1m'
 
-def get_active_users_from_logs(proxy_name):
+def get_active_users_for_proxy(proxy_name):
     """
-    Get active users for a specific proxy from logs
-    Counts users who have connected but not disconnected in the last 10 minutes
+    Get number of active users for a specific proxy from logs
+    Using the format: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
     """
     try:
         # Get logs from last 10 minutes
@@ -34,93 +34,18 @@ def get_active_users_from_logs(proxy_name):
         
         logs = result.stdout
         
-        # Pattern for connection: "User <proxy_name> connected from <ip>"
-        connect_pattern = rf'User {proxy_name} .*connected from (\d+\.\d+\.\d+\.\d+)'
-        disconnect_pattern = rf'User {proxy_name} .*disconnected'
+        # Pattern for stats line: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
+        pattern = rf'{proxy_name}:\s*(\d+)\s*connects\s*\((\d+)\s*current\)'
         
-        # Find all connections and disconnections
-        connected_ips = set()
-        disconnected_ips = set()
+        # Find all matches
+        matches = re.findall(pattern, logs)
         
-        # Process logs line by line to maintain order
-        for line in logs.split('\n'):
-            # Check for connection
-            connect_match = re.search(connect_pattern, line)
-            if connect_match:
-                ip = connect_match.group(1)
-                connected_ips.add(ip)
-                # If IP was previously disconnected, remove from disconnected
-                if ip in disconnected_ips:
-                    disconnected_ips.remove(ip)
-                continue
-            
-            # Check for disconnection
-            if re.search(disconnect_pattern, line):
-                # Try to extract IP from disconnect message
-                ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', line)
-                if ip_match:
-                    ip = ip_match.group(1)
-                    disconnected_ips.add(ip)
-                else:
-                    # If IP not in disconnect message, we need to find which IP disconnected
-                    # This is a limitation, but we can handle it by counting connections
-                    pass
+        if matches:
+            # Get the last match (most recent stats)
+            total_connects, current_users = matches[-1]
+            return int(current_users)
         
-        # Active users = connected_ips - disconnected_ips
-        active_ips = connected_ips - disconnected_ips
-        
-        # Alternative method: count unique users who connected in last 5 minutes
-        # and haven't disconnected
-        try:
-            # Get more detailed logs
-            detail_result = subprocess.run(
-                ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '5 minutes ago'],
-                capture_output=True,
-                text=True
-            )
-            detail_logs = detail_result.stdout
-            
-            # Count all connection events
-            all_connects = re.findall(rf'User {proxy_name} .*connected', detail_logs)
-            all_disconnects = re.findall(rf'User {proxy_name} .*disconnected', detail_logs)
-            
-            # Estimate active users
-            active_estimate = max(0, len(all_connects) - len(all_disconnects))
-            
-            # If we have at least one connection, use the estimate
-            if len(all_connects) > 0:
-                # Use the larger of the two methods
-                return max(len(active_ips), active_estimate)
-        except:
-            pass
-        
-        return len(active_ips)
-        
-    except Exception as e:
         return 0
-
-def get_connection_count_by_port(port):
-    """
-    Get number of active connections on a specific port
-    """
-    try:
-        result = subprocess.run(
-            ['ss', '-tan', '|', 'grep', f':{port}'],
-            shell=True,
-            capture_output=True,
-            text=True
-        )
-        
-        lines = result.stdout.strip().split('\n')
-        established = 0
-        
-        for line in lines:
-            if not line.strip():
-                continue
-            if 'ESTAB' in line:
-                established += 1
-        
-        return established
         
     except Exception as e:
         return 0
@@ -146,39 +71,27 @@ def get_total_historical_users(proxy_name):
             capture_output=True,
             text=True
         )
-        pattern = rf'User {proxy_name} .*connected from'
-        connections = re.findall(pattern, result.stdout, re.IGNORECASE)
+        logs = result.stdout
         
-        # Try to extract unique IPs
-        unique_ips = set()
-        for conn in connections:
-            ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', conn)
-            if ip_match:
-                unique_ips.add(ip_match.group(1))
+        # Find the latest stats for this proxy
+        pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
+        matches = re.findall(pattern, logs)
         
-        return len(unique_ips) if unique_ips else len(connections)
+        if matches:
+            # Return the latest total connects
+            return int(matches[-1])
+        
+        return 0
     except:
         return 0
-
-def update_stats_file(proxy_name, stats):
-    """
-    Save statistics to a file for persistence
-    """
-    stats_file = f"/etc/mtpulse/stats_{proxy_name}.json"
-    try:
-        os.makedirs('/etc/mtpulse', exist_ok=True)
-        with open(stats_file, 'w') as f:
-            json.dump(stats, f, indent=2)
-    except:
-        pass
 
 def get_traffic_stats(proxy_name):
     """
     Get traffic statistics for a specific proxy
-    Returns: (total_bytes, total_connections)
+    From format: "Proxy-1: 17 connects (3 current), 0.66 MB, 723 msgs"
     """
     try:
-        # Get traffic logs
+        # Get traffic logs from last 24 hours
         result = subprocess.run(
             ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '24 hours ago'],
             capture_output=True,
@@ -187,34 +100,114 @@ def get_traffic_stats(proxy_name):
         
         logs = result.stdout
         
-        # Look for traffic lines like: "User NL3_1 sent 1024 bytes, received 2048 bytes"
-        traffic_pattern = rf'User {proxy_name} .*sent (\d+) bytes, received (\d+) bytes'
-        total_sent = 0
-        total_received = 0
+        # Pattern for stats line
+        pattern = rf'{proxy_name}:\s*\d+\s*connects\s*\(\d+\s*current\),\s*([\d.]+)\s*([MG]B)'
         
-        for match in re.finditer(traffic_pattern, logs, re.IGNORECASE):
-            sent = int(match.group(1))
-            received = int(match.group(2))
-            total_sent += sent
-            total_received += received
+        total_mb = 0.0
+        for match in re.finditer(pattern, logs):
+            value = float(match.group(1))
+            unit = match.group(2)
+            if unit == 'GB':
+                total_mb += value * 1024
+            else:  # MB
+                total_mb += value
         
-        # Also count total connections
-        connect_pattern = rf'User {proxy_name} .*connected'
-        total_connections = len(re.findall(connect_pattern, logs, re.IGNORECASE))
+        # Convert MB to bytes
+        total_bytes = int(total_mb * 1024 * 1024)
+        
+        # Count total connections
+        connect_pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
+        connect_matches = re.findall(connect_pattern, logs)
+        total_connections = int(connect_matches[-1]) if connect_matches else 0
         
         return {
-            'total_sent': total_sent,
-            'total_received': total_received,
-            'total_bytes': total_sent + total_received,
+            'total_sent': total_bytes // 2,  # Approximate
+            'total_received': total_bytes // 2,  # Approximate
+            'total_bytes': total_bytes,
             'total_connections': total_connections
         }
     except Exception as e:
         return {'total_sent': 0, 'total_received': 0, 'total_bytes': 0, 'total_connections': 0}
 
-def format_bytes(bytes):
+def format_bytes(bytes_value):
     """Format bytes to human readable format"""
+    if bytes_value == 0:
+        return "0 B"
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes < 1024.0:
-            return f"{bytes:.1f} {unit}"
-        bytes /= 1024.0
-    return f"{bytes:.1f} PB"
+        if bytes_value < 1024.0:
+            return f"{bytes_value:.1f} {unit}"
+        bytes_value /= 1024.0
+    return f"{bytes_value:.1f} PB"
+
+def get_connection_count(port):
+    """
+    Get number of active connections on a specific port
+    """
+    try:
+        result = subprocess.run(
+            ['ss', '-tan', '|', 'grep', f':{port}'],
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        
+        lines = result.stdout.strip().split('\n')
+        established = 0
+        
+        for line in lines:
+            if not line.strip():
+                continue
+            if 'ESTAB' in line:
+                established += 1
+        
+        return established
+        
+    except Exception as e:
+        return 0
+
+def view_live_logs():
+    """
+    View live logs with color highlighting
+    """
+    try:
+        print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
+        print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+        print(f"{Colors.YELLOW}ℹ️  Showing real-time logs with proxy statistics highlighted{Colors.NC}")
+        print("")
+        
+        # Run journalctl with follow mode
+        process = subprocess.Popen(
+            ['journalctl', '-u', 'mtprotoproxy', '-f', '--no-pager', '-o', 'cat'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+        
+        try:
+            for line in process.stdout:
+                # Colorize proxy stats lines
+                if 'connects' in line and 'current' in line:
+                    # This is a stats line - highlight it
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        proxy_name = parts[0].strip()
+                        stats = parts[1].strip()
+                        print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
+                    else:
+                        print(f"{Colors.CYAN}{line}{Colors.NC}")
+                elif 'New IPs' in line:
+                    print(f"{Colors.YELLOW}🆕 {line}{Colors.NC}")
+                elif 'Error' in line or 'error' in line:
+                    print(f"{Colors.RED}❌ {line}{Colors.NC}")
+                else:
+                    print(line)
+                    
+        except KeyboardInterrupt:
+            process.terminate()
+            print(f"\n{Colors.GREEN}✅ Log viewer stopped.{Colors.NC}")
+            
+    except Exception as e:
+        print(f"{Colors.RED}❌ Error viewing logs: {e}{Colors.NC}")
+    
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
