@@ -12,7 +12,7 @@ from pathlib import Path
 import mtproxy_stats
 
 # ========== Settings ==========
-VERSION = "3.4.2"
+VERSION = "3.4.3"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -637,7 +637,6 @@ def service_menu():
         print(f"  {Colors.GREEN}3.{Colors.NC} Restart")
         print(f"  {Colors.GREEN}4.{Colors.NC} Status")
         print(f"  {Colors.GREEN}5.{Colors.NC} View Logs (last 30 lines)")
-        print(f"  {Colors.GREEN}6.{Colors.NC} 📡 Live Log Viewer")  # New option
         print(f"  {Colors.GREEN}0.{Colors.NC} Back")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -661,8 +660,6 @@ def service_menu():
         elif choice == '5':
             subprocess.run(['journalctl', '-u', SERVICE_NAME, '-n', '30', '--no-pager'], check=False)
             input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
-        elif choice == '6':
-            mtproxy_stats.view_live_logs()  # New live log viewer
         elif choice == '0':
             break
         else:
