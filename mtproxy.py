@@ -178,7 +178,7 @@ def list_proxies(config, show_status=True, show_links=False):
     
     # Get total users and bandwidth distribution once
     total_users = mtproxy_stats.get_active_users_count()
-    total_bandwidth = mtproxy_stats.get_total_bandwidth_dynamic()
+    total_bandwidth = mtproxy_stats.get_total_bandwidth()
     
     for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
         ids.append(proxy_id)
