@@ -163,7 +163,7 @@ def get_proxy_link(proxy):
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
-    """Display list of proxies with online/offline user statistics, traffic and speed"""
+    """Display list of proxies with online/offline user statistics and traffic"""
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -175,10 +175,6 @@ def list_proxies(config, show_status=True, show_links=False):
     ids = []
     labels = []
     status = get_proxy_status()
-    
-    # Get total users and bandwidth distribution once
-    total_users = mtproxy_stats.get_active_users_count()
-    total_bandwidth = mtproxy_stats.get_total_bandwidth()
     
     for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
         ids.append(proxy_id)
@@ -195,24 +191,16 @@ def list_proxies(config, show_status=True, show_links=False):
             if not server:
                 server = get_public_ip()
         
-        # Get active users for this proxy
+        # Get active users for THIS SPECIFIC proxy using its name
         online = mtproxy_stats.get_active_users_for_proxy(name)
         
-        # Get historical total users
+        # Get historical total users (for offline calculation)
         total_history = mtproxy_stats.get_total_historical_users(name)
         offline = max(0, total_history - online) if total_history > 0 else 0
         
         # Get traffic statistics
         traffic = mtproxy_stats.get_traffic_stats(name)
         traffic_display = mtproxy_stats.format_bytes(traffic.get('total_bytes', 0))
-        
-        # Calculate fair bandwidth per user
-        if total_users > 0:
-            per_user_bandwidth = total_bandwidth / total_users
-            proxy_bandwidth = per_user_bandwidth * online
-        else:
-            per_user_bandwidth = 0
-            proxy_bandwidth = 0
         
         # Status indicators
         if status == "active":
@@ -232,40 +220,17 @@ def list_proxies(config, show_status=True, show_links=False):
         else:
             tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
         
-        # Speed display with fair distribution
-        if online > 0 and total_users > 0:
-            speed_text = f"{Colors.BLUE}⚡ {per_user_bandwidth:.1f} Mbit/s/user{Colors.NC}"
-            if per_user_bandwidth >= 10:
-                quality = f"{Colors.GREEN}Excellent{Colors.NC}"
-            elif per_user_bandwidth >= 5:
-                quality = f"{Colors.YELLOW}Good{Colors.NC}"
-            elif per_user_bandwidth >= 2:
-                quality = f"{Colors.PURPLE}Fair{Colors.NC}"
-            else:
-                quality = f"{Colors.RED}Slow{Colors.NC}"
-            speed_text = f"{Colors.BLUE}⚡ {quality} ({per_user_bandwidth:.1f} Mbit/s/user){Colors.NC}"
-        else:
-            speed_text = f"{Colors.YELLOW}💤 Idle{Colors.NC}"
-        
-        # Show all stats with distribution info
+        # Show all stats
         label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
                 f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
                 f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC} | "
-                f"{Colors.BLUE}● Usage: {Colors.WHITE}{traffic_display}{Colors.NC} | "
-                f"{speed_text}")
+                f"{Colors.BLUE}● Usage: {Colors.WHITE}{traffic_display}{Colors.NC}")
         labels.append(label)
         print(f"  {label}")
         
         if show_links and status == "active":
             link = get_proxy_link(proxy)
             print(f"     {Colors.CYAN}🔗 {link}{Colors.NC}")
-    
-    # Show total summary
-    if total_users > 0:
-        print(f"\n{Colors.CYAN}📊 Total Summary:{Colors.NC}")
-        print(f"  {Colors.WHITE}● Total Users: {Colors.GREEN}{total_users}{Colors.NC}")
-        print(f"  {Colors.WHITE}● Total Bandwidth: {Colors.GREEN}{total_bandwidth:.1f} Mbit/s{Colors.NC}")
-        print(f"  {Colors.WHITE}● Fair Share: {Colors.GREEN}{(total_bandwidth/total_users):.1f} Mbit/s/user{Colors.NC}")
     
     print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
     return ids, labels
