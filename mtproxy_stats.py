@@ -167,41 +167,67 @@ def get_connection_count(port):
 
 def view_live_logs():
     """
-    View live logs with color highlighting
+    View live logs with color highlighting using tail -f
     """
     try:
         print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         print(f"{Colors.YELLOW}ℹ️  Showing real-time logs with proxy statistics highlighted{Colors.NC}")
+        print(f"{Colors.YELLOW}💡 Press Ctrl+C to stop viewing{Colors.NC}")
         print("")
         
-        # Run journalctl with follow mode
+        # Use tail -f on the journalctl output
+        # First, get the last 50 lines, then follow
+        cmd = "journalctl -u mtprotoproxy --no-pager -n 50 -o cat && journalctl -u mtprotoproxy -f --no-pager -o cat"
+        
         process = subprocess.Popen(
-            ['journalctl', '-u', 'mtprotoproxy', '-f', '--no-pager', '-o', 'cat'],
+            cmd,
+            shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1
+            bufsize=1,
+            universal_newlines=True
         )
         
+        # Set stdout to non-blocking
+        import fcntl
+        import os
+        fd = process.stdout.fileno()
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        
         try:
-            for line in process.stdout:
-                # Colorize proxy stats lines
-                if 'connects' in line and 'current' in line:
-                    # This is a stats line - highlight it
-                    parts = line.split(':')
-                    if len(parts) >= 2:
-                        proxy_name = parts[0].strip()
-                        stats = parts[1].strip()
-                        print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC} {stats}")
+            while True:
+                try:
+                    line = process.stdout.readline()
+                    if not line:
+                        time.sleep(0.1)
+                        continue
+                    
+                    # Colorize based on content
+                    if 'connects' in line and 'current' in line:
+                        # Stats line - highlight proxy name
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            proxy_name = parts[0].strip()
+                            stats = ':'.join(parts[1:]).strip()
+                            print(f"{Colors.GREEN}[{proxy_name}]{Colors.NC}{stats}")
+                        else:
+                            print(f"{Colors.CYAN}{line.strip()}{Colors.NC}")
+                    elif 'New IPs' in line:
+                        print(f"{Colors.YELLOW}🆕 {line.strip()}{Colors.NC}")
+                    elif 'Error' in line or 'error' in line or 'ERROR' in line:
+                        print(f"{Colors.RED}❌ {line.strip()}{Colors.NC}")
+                    elif 'WARNING' in line or 'Warning' in line:
+                        print(f"{Colors.YELLOW}⚠️ {line.strip()}{Colors.NC}")
                     else:
-                        print(f"{Colors.CYAN}{line}{Colors.NC}")
-                elif 'New IPs' in line:
-                    print(f"{Colors.YELLOW}🆕 {line}{Colors.NC}")
-                elif 'Error' in line or 'error' in line:
-                    print(f"{Colors.RED}❌ {line}{Colors.NC}")
-                else:
-                    print(line)
+                        print(line.strip())
+                        
+                except IOError:
+                    # No data available yet
+                    time.sleep(0.1)
+                    continue
                     
         except KeyboardInterrupt:
             process.terminate()
@@ -209,5 +235,7 @@ def view_live_logs():
             
     except Exception as e:
         print(f"{Colors.RED}❌ Error viewing logs: {e}{Colors.NC}")
+        import traceback
+        traceback.print_exc()
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
