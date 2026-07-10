@@ -12,7 +12,7 @@ from pathlib import Path
 import mtproxy_stats
 
 # ========== Settings ==========
-VERSION = "3.3.7"
+VERSION = "3.4.0"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -688,6 +688,41 @@ def setup():
     print("")
     print(f"{Colors.GREEN}✅ Setup completed! Run 'mtproxy' to manage proxies.{Colors.NC}")
 
+def update_proxy():
+    """Update the proxy manager to the latest version"""
+    clear_screen()
+    print(f"{Colors.BOLD}{Colors.GREEN}🔄 Update MTProxy Manager{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    print("")
+    
+    print(f"{Colors.YELLOW}This will update the MTProxy Manager to the latest version.{Colors.NC}")
+    print(f"{Colors.YELLOW}Your existing proxies and settings will be preserved.{Colors.NC}")
+    print("")
+    
+    confirm = input(f"{Colors.BOLD}{Colors.PURPLE}Continue with update? (y/N): {Colors.NC}").strip().lower()
+    if confirm != 'y':
+        print(f"{Colors.YELLOW}Update cancelled.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+        return
+    
+    print(f"{Colors.CYAN}🔄 Running update script...{Colors.NC}")
+    
+    # Run the update script
+    result = subprocess.run(
+        ['bash', '-c', 'bash <(curl -Ls https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/update.sh)'],
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode == 0:
+        print(f"{Colors.GREEN}✅ Update completed successfully!{Colors.NC}")
+        print(f"{Colors.YELLOW}💡 Please restart the program to see changes.{Colors.NC}")
+    else:
+        print(f"{Colors.RED}❌ Update failed!{Colors.NC}")
+        print(f"{Colors.RED}Error: {result.stderr}{Colors.NC}")
+    
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+    
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == '--setup':
         setup()
@@ -728,6 +763,7 @@ def main():
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Edit Default Server Settings")
+            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")  # گزینه جدید
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -753,6 +789,8 @@ def main():
                 remove_proxy()
             elif choice == '5':
                 set_default_server_menu()
+            elif choice == '6':
+                update_proxy()  # تابع جدید
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
