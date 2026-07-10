@@ -28,17 +28,12 @@ curl -s -o "$INSTALL_DIR/mtproxy_stats.py" https://raw.githubusercontent.com/Mah
 chmod +x "$INSTALL_DIR/mtproxy.py"
 chmod +x "$INSTALL_DIR/mtproxy_stats.py"
 
+# Replace the main executable with the new Python script
 if [ -f "$INSTALL_DIR/mtproxy" ]; then
     echo "🔄 Updating main executable..."
-    sudo cp "$INSTALL_DIR/mtproxy.py" "$INSTALL_DIR/mtproxy"
-    sudo chmod +x "$INSTALL_DIR/mtproxy"
+    cp "$INSTALL_DIR/mtproxy.py" "$INSTALL_DIR/mtproxy"
+    chmod +x "$INSTALL_DIR/mtproxy"
 fi
-
-# Create symlink if needed
-if [ ! -f "/usr/local/bin/mtproxy" ]; then
-    ln -sf "$INSTALL_DIR/mtproxy.py" "/usr/local/bin/mtproxy"
-fi
-
 # Restart service if running
 if systemctl is-active --quiet mtprotoproxy; then
     echo "🔄 Restarting proxy service..."
