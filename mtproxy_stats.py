@@ -236,6 +236,7 @@ def view_live_logs():
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
+
 def get_total_bandwidth():
     """
     Get total available bandwidth of the server
