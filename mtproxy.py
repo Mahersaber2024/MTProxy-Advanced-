@@ -12,7 +12,7 @@ from pathlib import Path
 import mtproxy_stats
 
 # ========== Settings ==========
-VERSION = "3.4.0"
+VERSION = "3.4.1"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -763,7 +763,7 @@ def main():
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Edit Default Server Settings")
-            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")  # گزینه جدید
+            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")  # New
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -790,7 +790,7 @@ def main():
             elif choice == '5':
                 set_default_server_menu()
             elif choice == '6':
-                update_proxy()  # تابع جدید
+                update_proxy()  # New
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
