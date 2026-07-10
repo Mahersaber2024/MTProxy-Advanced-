@@ -163,7 +163,11 @@ def get_proxy_link(proxy):
     return f"tg://proxy?server={server}&port={port}&secret={full_secret}"
 
 def list_proxies(config, show_status=True, show_links=False):
+<<<<<<< HEAD
     """Display list of proxies with online/offline user statistics"""
+=======
+    """Display list of proxies with online/offline user statistics, traffic and speed"""
+>>>>>>> v2-stats
     proxies = config.get('proxies', {})
     if not proxies:
         print(f"{Colors.YELLOW}⚠️ No proxies configured.{Colors.NC}")
@@ -191,13 +195,29 @@ def list_proxies(config, show_status=True, show_links=False):
             if not server:
                 server = get_public_ip()
         
+<<<<<<< HEAD
         # Get active connections (online users)
         online = mtproxy_stats.get_active_users_from_process(port)
+=======
+        # Get active users
+        online = mtproxy_stats.get_active_users_for_proxy(name)
+>>>>>>> v2-stats
         
         # Get historical total users (for offline calculation)
         total_history = mtproxy_stats.get_total_historical_users(name)
         offline = max(0, total_history - online) if total_history > 0 else 0
         
+<<<<<<< HEAD
+=======
+        # Get traffic statistics
+        traffic = mtproxy_stats.get_traffic_stats(name)
+        traffic_display = mtproxy_stats.format_bytes(traffic.get('total_bytes', 0))
+        
+        # Get bandwidth per user
+        bandwidth_stats = mtproxy_stats.get_per_user_bandwidth(name)
+        quality = mtproxy_stats.check_connection_quality(name)
+        
+>>>>>>> v2-stats
         # Status indicators
         if status == "active":
             status_text = f"{Colors.GREEN}● Active{Colors.NC}"
@@ -216,9 +236,24 @@ def list_proxies(config, show_status=True, show_links=False):
         else:
             tag_display = f"{Colors.YELLOW}No Tag{Colors.NC}"
         
+<<<<<<< HEAD
         label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
                 f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
                 f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC}")
+=======
+        # Speed display
+        if online > 0 and bandwidth_stats.get('total_bandwidth', 0) > 0:
+            speed_text = f"{Colors.BLUE}⚡ {quality}{Colors.NC}"
+        else:
+            speed_text = f"{Colors.YELLOW}💤 Idle{Colors.NC}"
+        
+        # Show all stats
+        label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
+                f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
+                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC} | "
+                f"{Colors.BLUE}● Usage: {Colors.WHITE}{traffic_display}{Colors.NC} | "
+                f"{speed_text}")
+>>>>>>> v2-stats
         labels.append(label)
         print(f"  {label}")
         
@@ -791,6 +826,24 @@ def main():
         if proxy_count > 0 and status == "active":
             print("")
             list_proxies(config, show_status=True, show_links=True)
+            
+            # ==================== TOTAL BANDWIDTH SUMMARY ====================
+            total_online = 0
+            for proxy in config.get('proxies', {}).values():
+                name = proxy.get('name', '')
+                if name:
+                    online = mtproxy_stats.get_active_users_for_proxy(name)
+                    total_online += online
+            
+            if total_online > 0:
+                total_bw = mtproxy_stats.get_total_bandwidth()
+                per_user = total_bw / total_online if total_online > 0 else 0
+                
+                print(f"\n{Colors.CYAN}📊 Overall Status:{Colors.NC}")
+                print(f"  {Colors.WHITE}● Total Online Users: {Colors.GREEN}{total_online}{Colors.NC}")
+                print(f"  {Colors.WHITE}● Total Bandwidth:   {Colors.GREEN}{total_bw:.1f} Mbit/s{Colors.NC}")
+                print(f"  {Colors.WHITE}● Average per User:  {Colors.GREEN}{per_user:.1f} Mbit/s{Colors.NC}")
+            # ================================================================
         
         print("")
         print(f"{Colors.BLUE}📋 Menu:{Colors.NC}")
@@ -802,7 +855,7 @@ def main():
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Edit Default Server Settings")
-            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")  # New
+            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -829,7 +882,7 @@ def main():
             elif choice == '5':
                 set_default_server_menu()
             elif choice == '6':
-                update_proxy()  # New
+                update_proxy()
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
