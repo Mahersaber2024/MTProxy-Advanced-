@@ -25,7 +25,6 @@ def get_stats_file(proxy_name):
     return f"{STATS_DIR}/stats_{proxy_name}.json"
 
 def load_proxy_stats(proxy_name):
-    """Load persistent stats for a proxy"""
     stats_file = get_stats_file(proxy_name)
     if os.path.exists(stats_file):
         try:
@@ -42,7 +41,6 @@ def load_proxy_stats(proxy_name):
     }
 
 def save_proxy_stats(proxy_name, data):
-    """Save stats persistently"""
     stats_file = get_stats_file(proxy_name)
     try:
         with open(stats_file, 'w') as f:
@@ -51,39 +49,55 @@ def save_proxy_stats(proxy_name, data):
         pass
 
 def get_active_users_for_proxy(proxy_name):
-    """Get currently online users"""
+    """
+    Main method: Count active connections using ss (most reliable)
+    """
     try:
-        result = subprocess.run(
-            ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '10 minutes ago'],
-            capture_output=True, text=True
-        )
-        logs = result.stdout
-        pattern = rf'{proxy_name}:\s*(\d+)\s*connects\s*\((\d+)\s*current\)'
-        matches = re.findall(pattern, logs)
-        return int(matches[-1][1]) if matches else 0
-    except:
-        return 0
+        # Find port for this specific proxy
+        from mtproxy import load_proxies, get_default_port
+        config = load_proxies()
+        port = None
+        
+        for p in config.get('proxies', {}).values():
+            if p.get('name') == proxy_name:
+                port = p.get('port') or get_default_port()
+                break
+        
+        if not port:
+            port = get_default_port()
+        
+        # Count established connections on this port
+        active = get_connection_count(port)
+        return active
+        
+    except Exception:
+        # Fallback to log method if ss fails
+        try:
+            result = subprocess.run(
+                ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '10 minutes ago'],
+                capture_output=True, text=True
+            )
+            logs = result.stdout
+            pattern = rf'{proxy_name}:\s*(\d+)\s*connects\s*\((\d+)\s*current\)'
+            matches = re.findall(pattern, logs)
+            return int(matches[-1][1]) if matches else 0
+        except:
+            return 0
 
 def get_total_historical_users(proxy_name):
-    """Get total unique users ever connected"""
     stats = load_proxy_stats(proxy_name)
     return stats.get('total_users', 0)
 
 def get_traffic_stats(proxy_name):
-    """
-    Get accurate cumulative traffic ONLY for this MTProxy instance
-    """
+    # (همان نسخه قبلی که قبلاً دادم - بدون تغییر)
     stats = load_proxy_stats(proxy_name)
-    
     try:
-        # Get recent logs (last 24h is enough to catch new reports)
         result = subprocess.run(
             ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '24 hours ago'],
             capture_output=True, text=True
         )
         logs = result.stdout
 
-        # Pattern to extract traffic: "ProxyName: X connects (Y current), Z.ZZ GB, ..."
         pattern = rf'{proxy_name}:\s*\d+\s*connects\s*\(\d+\s*current\),\s*([\d.]+)\s*([MG]B)'
         
         latest_mb = stats['last_traffic_mb']
@@ -93,17 +107,14 @@ def get_traffic_stats(proxy_name):
             unit = match.group(2)
             current_mb = value * 1024 if unit == 'GB' else value
             
-            # Only add the difference (delta) to avoid double counting
             if current_mb > latest_mb:
                 delta_mb = current_mb - latest_mb
                 stats['total_bytes'] += int(delta_mb * 1024 * 1024)
                 latest_mb = current_mb
 
-        # Update last known traffic
         stats['last_traffic_mb'] = latest_mb
         stats['last_update'] = datetime.now().isoformat()
 
-        # Update total connections
         connect_pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
         connect_matches = re.findall(connect_pattern, logs)
         if connect_matches:
@@ -112,14 +123,12 @@ def get_traffic_stats(proxy_name):
         save_proxy_stats(proxy_name, stats)
 
         return {
-            'total_sent': stats['total_bytes'] // 2,      # Approximate upload
-            'total_received': stats['total_bytes'] // 2,  # Approximate download
+            'total_sent': stats['total_bytes'] // 2,
+            'total_received': stats['total_bytes'] // 2,
             'total_bytes': stats['total_bytes'],
             'total_connections': stats['total_connections']
         }
-
     except Exception:
-        # Return cached stats if log reading fails
         return {
             'total_sent': stats['total_bytes'] // 2,
             'total_received': stats['total_bytes'] // 2,
@@ -128,7 +137,6 @@ def get_traffic_stats(proxy_name):
         }
 
 def format_bytes(bytes_value):
-    """Format bytes to human readable"""
     if bytes_value == 0:
         return "0 B"
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -137,20 +145,19 @@ def format_bytes(bytes_value):
         bytes_value /= 1024.0
     return f"{bytes_value:.1f} PB"
 
-# Keep other functions unchanged
 def get_connection_count(port):
+    """Count established TCP connections on specific port"""
     try:
         result = subprocess.run(
-            ['ss', '-tan', '|', 'grep', f':{port}'],
+            f"ss -tan | grep ':{port}' | grep ESTAB | wc -l",
             shell=True, capture_output=True, text=True
         )
-        lines = result.stdout.strip().split('\n')
-        return sum(1 for line in lines if line.strip() and 'ESTAB' in line)
+        return int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
     except:
         return 0
 
 def view_live_logs():
-    # (unchanged - you can keep your original version)
+    # همان نسخه قبلی شما
     try:
         print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
