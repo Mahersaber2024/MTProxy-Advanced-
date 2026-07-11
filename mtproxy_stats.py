@@ -162,7 +162,21 @@ def get_connection_count(port):
         return int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
     except:
         return 0
+        
+def update_peak_online(proxy_name, current_online):
+    """Update peak online users for a proxy"""
+    stats = load_proxy_stats(proxy_name)
+    if current_online > stats.get('peak_online', 0):
+        stats['peak_online'] = current_online
+        save_proxy_stats(proxy_name, stats)
+        return True
+    return False
 
+def get_peak_online(proxy_name):
+    """Get peak online users ever for a proxy"""
+    stats = load_proxy_stats(proxy_name)
+    return stats.get('peak_online', 0)
+    
 def view_live_logs():
     try:
         print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
