@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-# mtproxy_stats.py - Statistics module for MTProxy connections (Improved Version)
+# mtproxy_stats.py - Statistics module for MTProxy connections
 
 import os
 import subprocess
 import re
 import json
 from datetime import datetime
+import ipaddress
 
 class Colors:
     RED = '\033[0;31m'
@@ -29,67 +30,82 @@ def load_proxy_stats(proxy_name):
     if os.path.exists(stats_file):
         try:
             with open(stats_file, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                if 'unique_ips' in data:
+                    data['unique_ips'] = set(data['unique_ips'])
+                return data
         except:
             pass
+    
     return {
         'total_bytes': 0,
         'total_connections': 0,
-        'total_users': 0,
+        'unique_ips': set(),
         'last_traffic_mb': 0.0,
         'last_update': None
     }
 
 def save_proxy_stats(proxy_name, data):
     stats_file = get_stats_file(proxy_name)
+    save_data = data.copy()
+    if 'unique_ips' in save_data:
+        save_data['unique_ips'] = list(save_data['unique_ips'])
+    
     try:
         with open(stats_file, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(save_data, f, indent=2)
     except:
         pass
 
 def get_active_users_for_proxy(proxy_name):
-    """
-    Main method: Count active connections using ss (most reliable)
-    """
+    """Online users - using ss (reliable)"""
     try:
-        # Find port for this specific proxy
         from mtproxy import load_proxies, get_default_port
         config = load_proxies()
         port = None
-        
         for p in config.get('proxies', {}).values():
             if p.get('name') == proxy_name:
                 port = p.get('port') or get_default_port()
                 break
-        
         if not port:
             port = get_default_port()
+        return get_connection_count(port)
+    except:
+        return 0
+
+def update_unique_users(proxy_name):
+    """Update list of unique IPs that connected"""
+    stats = load_proxy_stats(proxy_name)
+    updated = False
+    
+    try:
+        # Get current connections with IPs
+        result = subprocess.run(
+            f"ss -tan | grep ':{get_default_port()}' | grep ESTAB | awk '{{print $5}}' | cut -d: -f1",
+            shell=True, capture_output=True, text=True
+        )
+        current_ips = result.stdout.strip().split('\n')
         
-        # Count established connections on this port
-        active = get_connection_count(port)
-        return active
-        
-    except Exception:
-        # Fallback to log method if ss fails
-        try:
-            result = subprocess.run(
-                ['journalctl', '-u', 'mtprotoproxy', '--no-pager', '--since', '10 minutes ago'],
-                capture_output=True, text=True
-            )
-            logs = result.stdout
-            pattern = rf'{proxy_name}:\s*(\d+)\s*connects\s*\((\d+)\s*current\)'
-            matches = re.findall(pattern, logs)
-            return int(matches[-1][1]) if matches else 0
-        except:
-            return 0
+        for ip in current_ips:
+            if ip and ip != "0.0.0.0" and not ip.startswith("127."):
+                if ip not in stats['unique_ips']:
+                    stats['unique_ips'].add(ip)
+                    updated = True
+    except:
+        pass
+    
+    if updated:
+        stats['total_users'] = len(stats['unique_ips'])
+        save_proxy_stats(proxy_name, stats)
 
 def get_total_historical_users(proxy_name):
+    """Total unique users ever connected"""
     stats = load_proxy_stats(proxy_name)
+    # Update users before returning
+    update_unique_users(proxy_name)
     return stats.get('total_users', 0)
 
 def get_traffic_stats(proxy_name):
-    # (همان نسخه قبلی که قبلاً دادم - بدون تغییر)
     stats = load_proxy_stats(proxy_name)
     try:
         result = subprocess.run(
@@ -99,14 +115,12 @@ def get_traffic_stats(proxy_name):
         logs = result.stdout
 
         pattern = rf'{proxy_name}:\s*\d+\s*connects\s*\(\d+\s*current\),\s*([\d.]+)\s*([MG]B)'
-        
         latest_mb = stats['last_traffic_mb']
         
         for match in re.finditer(pattern, logs):
             value = float(match.group(1))
             unit = match.group(2)
             current_mb = value * 1024 if unit == 'GB' else value
-            
             if current_mb > latest_mb:
                 delta_mb = current_mb - latest_mb
                 stats['total_bytes'] += int(delta_mb * 1024 * 1024)
@@ -114,26 +128,20 @@ def get_traffic_stats(proxy_name):
 
         stats['last_traffic_mb'] = latest_mb
         stats['last_update'] = datetime.now().isoformat()
-
-        connect_pattern = rf'{proxy_name}:\s*(\d+)\s*connects'
-        connect_matches = re.findall(connect_pattern, logs)
-        if connect_matches:
-            stats['total_connections'] = int(connect_matches[-1])
-
         save_proxy_stats(proxy_name, stats)
 
         return {
             'total_sent': stats['total_bytes'] // 2,
             'total_received': stats['total_bytes'] // 2,
             'total_bytes': stats['total_bytes'],
-            'total_connections': stats['total_connections']
+            'total_connections': stats.get('total_connections', 0)
         }
-    except Exception:
+    except:
         return {
             'total_sent': stats['total_bytes'] // 2,
             'total_received': stats['total_bytes'] // 2,
             'total_bytes': stats['total_bytes'],
-            'total_connections': stats.get('total_connections', 0)
+            'total_connections': 0
         }
 
 def format_bytes(bytes_value):
@@ -146,7 +154,6 @@ def format_bytes(bytes_value):
     return f"{bytes_value:.1f} PB"
 
 def get_connection_count(port):
-    """Count established TCP connections on specific port"""
     try:
         result = subprocess.run(
             f"ss -tan | grep ':{port}' | grep ESTAB | wc -l",
@@ -157,7 +164,6 @@ def get_connection_count(port):
         return 0
 
 def view_live_logs():
-    # همان نسخه قبلی شما
     try:
         print(f"{Colors.BOLD}{Colors.GREEN}📡 Live Log Viewer (Press Ctrl+C to exit){Colors.NC}")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
