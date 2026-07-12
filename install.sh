@@ -45,11 +45,10 @@ fi
 cd "$APP_DIR"
 
 # ============================================
-# Install Python dependencies (compatible with all Ubuntu versions)
+# Install Python dependencies
 # ============================================
 echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
 
-# Try with --break-system-packages (Ubuntu 24.04+), fallback to --user (Ubuntu 22.04 and older)
 if pip3 install --break-system-packages requests python-dotenv 2>/dev/null; then
   echo -e "${GREEN}✅ Installed with --break-system-packages${NC}"
 else
@@ -58,12 +57,23 @@ else
 fi
 
 # ============================================
-# Install management script as 'mtproxy'
+# Install management scripts
 # ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
+
+# کپی هر دو فایل اصلی و ماژول آمار
 cp -f mtproxy.py /usr/local/bin/mtproxy
+cp -f mtproxy_stats.py /usr/local/bin/mtproxy_stats.py
+
 sed -i 's/\r$//' /usr/local/bin/mtproxy
+sed -i 's/\r$//' /usr/local/bin/mtproxy_stats.py
+
 chmod +x /usr/local/bin/mtproxy
+chmod +x /usr/local/bin/mtproxy_stats.py
+
+# اضافه کردن مسیر پروژه به PYTHONPATH برای اطمینان کامل
+echo "export PYTHONPATH=\"\$PYTHONPATH:$APP_DIR\"" > /etc/profile.d/mtproxy.sh
+chmod +x /etc/profile.d/mtproxy.sh
 
 # ============================================
 # Create config directory
