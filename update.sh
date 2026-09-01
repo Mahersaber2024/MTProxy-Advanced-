@@ -107,4 +107,6 @@ echo ""
 echo "📁 Backup saved to: $BACKUP_DIR"
 echo "   (Keep this in case you need to rollback)"
 echo ""
-echo "Run 'mtproxy' to see the new features!"
+echo "🔄 Restarting program..."
+sleep 1
+exec mtproxy
