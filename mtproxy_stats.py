@@ -29,6 +29,13 @@ import subprocess
 CONFIG_DIR = "/etc/mtpulse"
 USAGE_DB = f"{CONFIG_DIR}/usage.json"
 SERVICE_NAME = "mtprotoproxy"
+# per-port instances created by the manager: mtproxy-inst@<bind>_<port>.service
+INSTANCE_UNIT_GLOB = "mtproxy-inst@*.service"
+
+
+def _journal_units():
+    """journalctl args covering the legacy service AND every port instance."""
+    return ['-u', f"{SERVICE_NAME}.service", '-u', INSTANCE_UNIT_GLOB]
 PROXY_DIR = "/opt/mtprotoproxy"
 CACHE_TTL = 5          # seconds - avoid hammering journalctl on every redraw
 DEFAULT_PERIOD = 60    # stats print period we enforce in config.py
@@ -119,7 +126,7 @@ def _read_journal(since_epoch):
         since = "7 days ago"
     try:
         res = subprocess.run(
-            ['journalctl', '-u', SERVICE_NAME, '--no-pager',
+            ['journalctl'] + _journal_units() + ['--no-pager',
              '-o', 'short-unix', '--since', since],
             capture_output=True, text=True, timeout=20)
         raw = res.stdout
@@ -315,7 +322,7 @@ def view_live_logs():
         print(f"{Colors.YELLOW}ℹ️  Real-time logs, proxy statistics highlighted{Colors.NC}")
         print("")
         process = subprocess.Popen(
-            ['journalctl', '-u', SERVICE_NAME, '-f', '--no-pager', '-o', 'cat'],
+            ['journalctl'] + _journal_units() + ['-f', '--no-pager', '-o', 'cat'],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, bufsize=1)
         try:
