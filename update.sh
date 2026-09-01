@@ -35,6 +35,10 @@ if [ -f "$CONFIG_DIR/proxies.json" ]; then
     cp "$CONFIG_DIR/proxies.json" "$BACKUP_DIR/proxies.json.bak"
 fi
 
+# Clean stale bytecode cache (causes old code to run even after update)
+echo "🧹 Clearing Python cache..."
+rm -rf "$INSTALL_DIR/__pycache__"
+
 # Download new files
 echo "📥 Downloading new version..."
 curl -s -o "$INSTALL_DIR/mtproxy.py" https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/mtproxy.py
@@ -97,6 +101,7 @@ echo "   • SOCKS5 proxy support (non-Telegram) - menu option 7"
 echo "   • FIXED: traffic/usage now counted correctly and survives restarts"
 echo "   • Online / Peak / Connects / Usage per proxy"
 echo "   • Real-time connection monitoring"
+echo "   • Bulk delete all proxies at once (menu option 8)"
 echo "   • Built-in update checker"
 echo ""
 echo "📁 Backup saved to: $BACKUP_DIR"

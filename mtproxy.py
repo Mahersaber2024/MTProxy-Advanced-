@@ -435,6 +435,41 @@ def add_proxy():
     
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
+def remove_all_proxies():
+    clear_screen()
+    print(f"{Colors.BOLD}{Colors.RED}🗑️ Delete ALL Proxies{Colors.NC}")
+    print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
+    config = load_proxies()
+    proxies = config.get('proxies', {})
+    if not proxies:
+        print(f"{Colors.YELLOW}⚠️ No proxies to delete.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+        return
+    print(f"{Colors.RED}⚠️ This will delete {len(proxies)} proxies: {list(proxies.keys())}{Colors.NC}")
+    print("")
+    confirm1 = input(f"{Colors.BOLD}{Colors.RED}Type 'delete all' to confirm (case sensitive): {Colors.NC}")
+    if confirm1 != 'delete all':
+        print(f"{Colors.YELLOW}Cancelled.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+        return
+    print(f"{Colors.YELLOW}Are you sure? All proxies will be removed. Type 'yes': {Colors.NC}")
+    confirm2 = input(f"{Colors.BOLD}{Colors.PURPLE}>{Colors.NC} ")
+    if confirm2.lower() != 'yes':
+        print(f"{Colors.YELLOW}Cancelled.{Colors.NC}")
+        input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+        return
+    config['proxies'] = {}
+    save_proxies(config)
+    with open(f"{PROXY_DIR}/config.py", 'r') as f:
+        content = f.read()
+    content = re.sub(r'USERS\s*=\s*\{[^}]*\}', 'USERS = {}', content)
+    with open(f"{PROXY_DIR}/config.py", 'w') as f:
+        f.write(content)
+    restart_service()
+    print(f"{Colors.GREEN}✅ All {len(proxies)} proxies deleted.{Colors.NC}")
+    input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
+
+
 def remove_proxy():
     clear_screen()
     print(f"{Colors.BOLD}{Colors.RED}➖ Remove Proxy{Colors.NC}")
@@ -811,6 +846,7 @@ def main():
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Edit Default Server Settings")
             print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")
             print(f"  {Colors.GREEN}7.{Colors.NC} 🧦 SOCKS5 Proxy (non-Telegram)")
+            print(f"  {Colors.GREEN}8.{Colors.NC} 🗑️ Delete ALL Proxies")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -840,6 +876,8 @@ def main():
                 update_proxy()
             elif choice == '7':
                 mtproxy_socks.menu()
+            elif choice == '8':
+                remove_all_proxies()
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
