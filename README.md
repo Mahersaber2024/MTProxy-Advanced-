@@ -30,6 +30,14 @@ After installation, simply run:
 ```bash
 mtproxy
 ```
+
+## Service Management
+```bash
+sudo systemctl restart mtprotoproxy
+sudo systemctl restart mtsocks          # SOCKS5
+sudo systemctl status mtprotoproxy
+```
+
 ## Uninstall
 Run the uninstall option from the menu or:
 
