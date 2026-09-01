@@ -61,15 +61,16 @@ fi
 # ============================================
 echo -e "${BLUE}📋 Installing management script...${NC}"
 
-# کپی هر دو فایل اصلی و ماژول آمار
+# کپی فایل اصلی + ماژول آمار + ماژول و سرور SOCKS5
 cp -f mtproxy.py /usr/local/bin/mtproxy
-cp -f mtproxy_stats.py /usr/local/bin/mtproxy_stats.py
+for f in mtproxy_stats.py mtproxy_socks.py socks5_server.py; do
+  cp -f "$f" "/usr/local/bin/$f"
+  sed -i 's/\r$//' "/usr/local/bin/$f"
+  chmod +x "/usr/local/bin/$f"
+done
 
 sed -i 's/\r$//' /usr/local/bin/mtproxy
-sed -i 's/\r$//' /usr/local/bin/mtproxy_stats.py
-
 chmod +x /usr/local/bin/mtproxy
-chmod +x /usr/local/bin/mtproxy_stats.py
 
 # اضافه کردن مسیر پروژه به PYTHONPATH برای اطمینان کامل
 echo "export PYTHONPATH=\"\$PYTHONPATH:$APP_DIR\"" > /etc/profile.d/mtproxy.sh
@@ -98,4 +99,5 @@ echo -e "${CYAN}─────────────────────�
 echo -e "  ${YELLOW}Just type:${NC} ${BOLD}${WHITE}mtproxy${NC}"
 echo ""
 echo -e "${GREEN}${BOLD}🎯 Quick Start:${NC} Just run ${BOLD}mtproxy${NC} to start managing your proxies!${NC}"
+echo -e "${YELLOW}🧦 SOCKS5 (non-Telegram): menu option 7${NC}"
 echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"

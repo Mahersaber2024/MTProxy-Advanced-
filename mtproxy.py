@@ -10,9 +10,10 @@ import shutil
 import re
 from pathlib import Path
 import mtproxy_stats
+import mtproxy_socks
 
 # ========== Settings ==========
-VERSION = "3.4.1"
+VERSION = "3.5.0"
 SPONSOR_NAME = "JadeTunnel"
 SPONSOR_LINK = "https://t.me/jadetunnell"
 CONTACT = "@jadetunnel"
@@ -136,6 +137,16 @@ def generate_secret():
     key_bytes = subprocess.run(['head', '-c', '16', '/dev/urandom'], capture_output=True).stdout
     return subprocess.run(['xxd', '-ps'], input=key_bytes, capture_output=True).stdout.decode().strip()
 
+def restart_service():
+    """Persist usage counters BEFORE restarting - mtprotoproxy zeroes its
+    in-memory stats on every restart, which is why usage kept showing 0 B."""
+    try:
+        mtproxy_stats.flush_stats()
+    except Exception:
+        pass
+    subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
+
+
 def get_proxy_status():
     if not os.path.exists(f"/etc/systemd/system/{SERVICE_NAME}.service"):
         return "not_installed"
@@ -175,6 +186,8 @@ def list_proxies(config, show_status=True, show_links=False):
     ids = []
     labels = []
     status = get_proxy_status()
+    # Single cached journal pass for ALL proxies (was: 3 journalctl runs each)
+    all_stats = mtproxy_stats.get_all_stats()
     
     for idx, (proxy_id, proxy) in enumerate(proxies.items(), 1):
         ids.append(proxy_id)
@@ -191,16 +204,12 @@ def list_proxies(config, show_status=True, show_links=False):
             if not server:
                 server = get_public_ip()
         
-        # Get active users for THIS SPECIFIC proxy using its name
-        online = mtproxy_stats.get_active_users_for_proxy(name)
-        
-        # Get historical total users (for offline calculation)
-        total_history = mtproxy_stats.get_total_historical_users(name)
-        offline = max(0, total_history - online) if total_history > 0 else 0
-        
-        # Get traffic statistics
-        traffic = mtproxy_stats.get_traffic_stats(name)
-        traffic_display = mtproxy_stats.format_bytes(traffic.get('total_bytes', 0))
+        # Stats: cumulative and restart-proof (persisted in /etc/mtpulse/usage.json)
+        st = all_stats.get(name, {})
+        online = st.get('online', 0)
+        peak = st.get('peak', 0)
+        connects = st.get('total_connects', 0)
+        traffic_display = mtproxy_stats.format_bytes(st.get('total_bytes', 0))
         
         # Status indicators
         if status == "active":
@@ -210,7 +219,7 @@ def list_proxies(config, show_status=True, show_links=False):
         
         # Color coding for online/offline
         online_color = Colors.GREEN if online > 0 else Colors.YELLOW
-        offline_color = Colors.RED if offline > 0 else Colors.WHITE
+        peak_color = Colors.WHITE
         
         server_text = f"@ {server}:{port}" if server else ""
         
@@ -223,7 +232,8 @@ def list_proxies(config, show_status=True, show_links=False):
         # Show all stats
         label = (f"{idx}. {Colors.BOLD}{name}{Colors.NC} | {server_text} | {tag_display} | "
                 f"{status_text} | {Colors.BLUE}● Online: {online_color}{online}{Colors.NC} | "
-                f"{Colors.BLUE}● Offline: {offline_color}{offline}{Colors.NC} | "
+                f"{Colors.BLUE}● Peak: {peak_color}{peak}{Colors.NC} | "
+                f"{Colors.BLUE}● Connects: {Colors.WHITE}{connects}{Colors.NC} | "
                 f"{Colors.BLUE}● Usage: {Colors.WHITE}{traffic_display}{Colors.NC}")
         labels.append(label)
         print(f"  {label}")
@@ -309,6 +319,8 @@ def install_mtproto_proxy():
 USERS = {{}}
 TLS_DOMAIN = "{domain}"
 MODES = {{ "classic": False, "secure": False, "tls": True }}
+# 60s stats period so usage/online numbers refresh every minute (default is 600)
+STATS_PRINT_PERIOD = 60
 """
     with open(f"{PROXY_DIR}/config.py", 'w') as f:
         f.write(config_py)
@@ -334,6 +346,7 @@ WantedBy=multi-user.target
     subprocess.run(['systemctl', 'enable', SERVICE_NAME], check=False)
     subprocess.run(['systemctl', 'start', SERVICE_NAME], check=False)
     
+    mtproxy_stats.ensure_stats_config(PROXY_DIR)
     print(f"{Colors.GREEN}✅ MTProto Proxy installed successfully!{Colors.NC}")
     return True
 
@@ -402,7 +415,7 @@ def add_proxy():
     with open(f"{PROXY_DIR}/config.py", 'w') as f:
         f.write(new_content)
     
-    subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
+    restart_service()
     
     link = get_proxy_link(proxy)
     
@@ -473,7 +486,7 @@ def remove_proxy():
     config['proxies'] = proxies
     save_proxies(config)
     
-    subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
+    restart_service()
     
     print(f"{Colors.GREEN}✅ Proxy '{name}' removed successfully!{Colors.NC}")
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
@@ -546,7 +559,7 @@ def tag_proxy():
     config['proxies'] = proxies
     save_proxies(config)
     
-    subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
+    restart_service()
     input(f"{Colors.BOLD}{Colors.PURPLE}Press Enter to return...{Colors.NC}")
 
 def set_default_server_menu():
@@ -617,7 +630,7 @@ def apply_config_changes():
             f.write(content)
         
         # Restart service
-        subprocess.run(['sudo', 'systemctl', 'restart', SERVICE_NAME], check=False)
+        restart_service()
         print(f"{Colors.GREEN}✅ Proxy restarted with new settings.{Colors.NC}")
     else:
         print(f"{Colors.RED}❌ Config file not found at {config_py_path}.{Colors.NC}")
@@ -637,7 +650,8 @@ def service_menu():
         print(f"  {Colors.GREEN}3.{Colors.NC} Restart")
         print(f"  {Colors.GREEN}4.{Colors.NC} Status")
         print(f"  {Colors.GREEN}5.{Colors.NC} View Logs (last 30 lines)")
-        print(f"  {Colors.GREEN}6.{Colors.NC} 📡 Live Log Viewer")  # New option
+        print(f"  {Colors.GREEN}6.{Colors.NC} 📡 Live Log Viewer")
+        print(f"  {Colors.GREEN}7.{Colors.NC} ♻️ Reset usage counters")
         print(f"  {Colors.GREEN}0.{Colors.NC} Back")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -652,7 +666,7 @@ def service_menu():
             print(f"{Colors.GREEN}✅ Stopped{Colors.NC}")
             time.sleep(1)
         elif choice == '3':
-            subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=False)
+            restart_service()
             print(f"{Colors.GREEN}✅ Restarted{Colors.NC}")
             time.sleep(1)
         elif choice == '4':
@@ -662,7 +676,13 @@ def service_menu():
             subprocess.run(['journalctl', '-u', SERVICE_NAME, '-n', '30', '--no-pager'], check=False)
             input(f"{Colors.YELLOW}Press Enter...{Colors.NC}")
         elif choice == '6':
-            mtproxy_stats.view_live_logs()  # New live log viewer
+            mtproxy_stats.view_live_logs()
+        elif choice == '7':
+            confirm = input(f"{Colors.RED}Reset stored usage for ALL proxies? (y/N): {Colors.NC}").strip().lower()
+            if confirm == 'y':
+                mtproxy_stats.reset_usage()
+                print(f"{Colors.GREEN}✅ Usage counters reset.{Colors.NC}")
+            time.sleep(1)
         elif choice == '0':
             break
         else:
@@ -686,6 +706,11 @@ def uninstall():
     subprocess.run(['rm', '-rf', PROXY_DIR], check=False)
     subprocess.run(['rm', '-rf', CONFIG_DIR], check=False)
     subprocess.run(['rm', '-f', '/usr/local/bin/mtproxy'], check=False)
+    
+    try:
+        mtproxy_socks.uninstall()
+    except Exception:
+        pass
     
     print(f"{Colors.GREEN}✅ Uninstallation completed!{Colors.NC}")
     time.sleep(1)
@@ -737,6 +762,11 @@ def main():
         setup()
         sys.exit(0)
     
+    # Existing installs: make sure stats print every 60s instead of every 600s
+    if os.path.exists(f"{PROXY_DIR}/config.py"):
+        if mtproxy_stats.ensure_stats_config(PROXY_DIR):
+            restart_service()
+    
     while True:
         print_header()
         
@@ -758,6 +788,13 @@ def main():
         
         print(f"  {Colors.BLUE}●{Colors.NC} Proxies: {Colors.WHITE}{proxy_count}{Colors.NC}")
         
+        socks_status = mtproxy_socks.service_status()
+        socks_count = len(mtproxy_socks.load_socks().get('socks', {}))
+        if socks_status != 'not_installed' or socks_count:
+            socks_color = Colors.GREEN if socks_status == 'active' else Colors.RED
+            socks_word = 'active' if socks_status == 'active' else 'stopped'
+            print(f"  {socks_color}●{Colors.NC} SOCKS5: {Colors.WHITE}{socks_count}{Colors.NC} ({socks_color}{socks_word}{Colors.NC})")
+        
         if proxy_count > 0 and status == "active":
             print("")
             list_proxies(config, show_status=True, show_links=True)
@@ -772,7 +809,8 @@ def main():
             print(f"  {Colors.GREEN}3.{Colors.NC} 📝 Add Tag to Proxy")
             print(f"  {Colors.GREEN}4.{Colors.NC} ➖ Remove Proxy")
             print(f"  {Colors.GREEN}5.{Colors.NC} 🌐 Edit Default Server Settings")
-            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")  # New
+            print(f"  {Colors.GREEN}6.{Colors.NC} 🔄 Update to Latest Version")
+            print(f"  {Colors.GREEN}7.{Colors.NC} 🧦 SOCKS5 Proxy (non-Telegram)")
         print(f"  {Colors.GREEN}0.{Colors.NC} 🚪 Exit")
         print(f"{Colors.CYAN}─────────────────────────────────────────────────────────────────{Colors.NC}")
         
@@ -799,7 +837,9 @@ def main():
             elif choice == '5':
                 set_default_server_menu()
             elif choice == '6':
-                update_proxy()  # New
+                update_proxy()
+            elif choice == '7':
+                mtproxy_socks.menu()
             elif choice == '0':
                 print(f"{Colors.GREEN}👋 Goodbye!{Colors.NC}")
                 sys.exit(0)
