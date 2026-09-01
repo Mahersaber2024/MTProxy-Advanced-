@@ -41,24 +41,48 @@ rm -rf "$INSTALL_DIR/__pycache__"
 
 # Download new files
 echo "📥 Downloading new version..."
-curl -s -o "$INSTALL_DIR/mtproxy.py" https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/mtproxy.py
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to download mtproxy.py"
-    echo "🔄 Restoring from backup..."
-    cp "$BACKUP_DIR/mtproxy.py" "$INSTALL_DIR/" 2>/dev/null
-    exit 1
+echo "  (this may take 10-30 seconds...)"
+
+DOWNLOAD_OK=1
+
+echo "  • mtproxy.py..."
+curl -s --max-time 30 -w "\n" -o "$INSTALL_DIR/mtproxy.py" https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/mtproxy.py
+if [ $? -ne 0 ] || [ ! -s "$INSTALL_DIR/mtproxy.py" ]; then
+    echo "    ❌ FAILED (network timeout or file not in repo)"
+    DOWNLOAD_OK=0
 fi
 
-for f in mtproxy_stats.py mtproxy_socks.py socks5_server.py; do
-    curl -s -o "$INSTALL_DIR/$f" "https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/$f"
+if [ $DOWNLOAD_OK -eq 1 ]; then
+  for f in mtproxy_stats.py mtproxy_socks.py socks5_server.py; do
+    echo "  • $f..."
+    curl -s --max-time 30 -w "\n" -o "$INSTALL_DIR/$f" "https://raw.githubusercontent.com/Mahersaber2024/MTProxy-Advanced-/main/$f"
     if [ $? -ne 0 ] || [ ! -s "$INSTALL_DIR/$f" ]; then
-        echo "❌ Failed to download $f"
-        echo "🔄 Restoring from backup..."
-        cp "$BACKUP_DIR/$f" "$INSTALL_DIR/" 2>/dev/null
-        exit 1
+        echo "    ❌ FAILED"
+        DOWNLOAD_OK=0
+        break
     fi
     chmod +x "$INSTALL_DIR/$f"
-done
+  done
+fi
+
+if [ $DOWNLOAD_OK -eq 0 ]; then
+    echo ""
+    echo -e "${RED}❌ Download failed. Files not in GitHub yet?${NC}"
+    echo "Possible causes:"
+    echo "  1. Files haven't been pushed to GitHub repo"
+    echo "  2. GitHub is slow or unreachable"
+    echo "  3. Network/firewall blocking"
+    echo ""
+    echo "Solution: Use the offline installer instead:"
+    echo "  sudo bash /root/mtproxy-3.5.0-offline-installer.sh"
+    echo ""
+    echo "🔄 Restoring old files from backup..."
+    for f in mtproxy.py mtproxy_stats.py mtproxy_socks.py socks5_server.py; do
+        [ -f "$BACKUP_DIR/$f" ] && cp "$BACKUP_DIR/$f" "$INSTALL_DIR/" 2>/dev/null || true
+    done
+    echo "Backup restored to $INSTALL_DIR"
+    exit 1
+fi
 
 # Make executable
 chmod +x "$INSTALL_DIR/mtproxy.py"
@@ -107,6 +131,8 @@ echo ""
 echo "📁 Backup saved to: $BACKUP_DIR"
 echo "   (Keep this in case you need to rollback)"
 echo ""
-echo "🔄 Restarting program..."
-sleep 1
+echo ""
+echo -e "${GREEN}${BOLD}✅ All files downloaded successfully${NC}"
+echo "🔄 Restarting program in 2 seconds..."
+sleep 2
 exec mtproxy
