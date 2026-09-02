@@ -101,7 +101,7 @@ def _blank_user():
         "base_octets": 0, "last_octets": 0,
         "base_connects": 0, "last_connects": 0,
         "base_msgs": 0, "last_msgs": 0,
-        "online": 0, "peak": 0, "last_seen": 0.0,
+        "online": 0, "peak": 0, "peak_unique": 0, "last_seen": 0.0,
     }
 
 
@@ -313,6 +313,69 @@ def get_connection_count(port):
         return int(res.stdout.strip() or 0)
     except Exception:
         return 0
+
+
+# ------------------------------------------------------- real online (unique IPs)
+# mtprotoproxy's own "current" figure (from its stats log line) counts open
+# sockets, not distinct clients - a single phone can hold several parallel
+# connections to the proxy (media downloads, DC pooling, etc.), so "current"
+# overcounts how many people are actually online. These helpers read live
+# ESTABLISHED connections straight from the kernel via `ss` and dedupe by
+# remote IP, giving an accurate "how many distinct clients are connected".
+_ss_cache = {"ts": 0.0, "rows": []}
+
+
+def _established_rows(force=False):
+    now = time.time()
+    if not force and (now - _ss_cache["ts"]) < CACHE_TTL and _ss_cache["rows"]:
+        return _ss_cache["rows"]
+    try:
+        res = subprocess.run(['ss', '-tanH', 'state', 'established'],
+                              capture_output=True, text=True, timeout=10)
+        out = res.stdout
+    except Exception:
+        out = ""
+    rows = []
+    for line in out.splitlines():
+        fields = line.split()
+        if len(fields) < 5:
+            continue
+        rows.append((fields[3], fields[4]))  # (local addr:port, peer addr:port)
+    _ss_cache["ts"] = now
+    _ss_cache["rows"] = rows
+    return rows
+
+
+def get_established_ips(port, bind=""):
+    """Unique remote IPs with a live ESTABLISHED connection to this local
+    port (optionally restricted to one bind/local IP). This is the real,
+    dedupe-by-client count - unlike mtprotoproxy's 'current', it won't count
+    one client's several parallel connections as several online users."""
+    port = str(port).strip()
+    bind = (bind or '').strip()
+    ips = set()
+    for local, peer in _established_rows():
+        laddr, _, lport = local.rpartition(':')
+        laddr = laddr.strip('[]')
+        if lport != port:
+            continue
+        if bind and laddr not in ('0.0.0.0', '::', '*', bind):
+            continue
+        paddr, _, _ = peer.rpartition(':')
+        ips.add(paddr.strip('[]'))
+    return ips
+
+
+def record_unique_peak(name, count):
+    """Persist the highest unique-client count ever seen for this proxy and
+    return it. Called every time we sample the live count, so the peak
+    builds up accurately over repeated menu refreshes."""
+    db = _load_db()
+    u = db["users"].setdefault(name, _blank_user())
+    if count > u.get("peak_unique", 0):
+        u["peak_unique"] = count
+        _save_db(db)
+    return u.get("peak_unique", count)
 
 
 def view_live_logs():
