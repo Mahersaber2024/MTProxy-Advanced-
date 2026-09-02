@@ -197,6 +197,9 @@ def list_proxies(config, show_status=True, show_links=False):
     labels = []
     # status is per port now, cached per instance key
     status_cache = {}
+    # unique-client online count is also per instance key (same port = same
+    # kernel connections, regardless of which named proxy shares it)
+    online_cache = {}
     # Single cached journal pass for ALL proxies (was: 3 journalctl runs each)
     all_stats = mtproxy_stats.get_all_stats()
     
@@ -217,8 +220,6 @@ def list_proxies(config, show_status=True, show_links=False):
         
         # Stats: cumulative and restart-proof (persisted in /etc/mtpulse/usage.json)
         st = all_stats.get(name, {})
-        online = st.get('online', 0)
-        peak = st.get('peak', 0)
         connects = st.get('total_connects', 0)
         traffic_display = mtproxy_stats.format_bytes(st.get('total_bytes', 0))
         
@@ -227,6 +228,16 @@ def list_proxies(config, show_status=True, show_links=False):
         if inst_key not in status_cache:
             status_cache[inst_key] = "active" if instance_status(inst_key) == "active" else "inactive"
         status = status_cache[inst_key]
+        
+        # "Online": real distinct clients (deduped by IP via `ss`), not the
+        # raw open-socket count mtprotoproxy's own log reports - one client
+        # can hold several parallel connections, which used to be counted
+        # as several separate "online" users.
+        if inst_key not in online_cache:
+            online_cache[inst_key] = len(mtproxy_stats.get_established_ips(
+                proxy_port(proxy), proxy_bind(proxy)))
+        online = online_cache[inst_key]
+        peak = mtproxy_stats.record_unique_peak(name, online)
         if status == "active":
             status_text = f"{Colors.GREEN}● Active{Colors.NC}"
         else:
